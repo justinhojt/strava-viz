@@ -106,11 +106,11 @@ def get_weather_with_timeout(session, lat, lon, activity_start, duration_seconds
                 }
             else:
                 # Fallback: nearest single hour if overlap weighting somehow fails
-                hour_index = activity_start.hour
+                nearest = (hourly_times - activity_start).abs().argmin()
                 return {
-                    'temp': temps[hour_index],
-                    'humidity': humidities[hour_index],
-                    'wind': winds[hour_index]
+                    'temp': temps[nearest],
+                    'humidity': humidities[nearest],
+                    'wind': winds[nearest]
                 }
             
         except requests.exceptions.Timeout:
