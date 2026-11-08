@@ -8,22 +8,22 @@ A locally-hosted Streamlit dashboard that turns a raw Strava bulk export into a 
 
 ## Key Features
 
-### 🏠 Home — Lifetime Overview
+### Home — Lifetime Overview
 A macro view of your entire training history: total activities, distance, moving time, calories, elevation gain, longest activity, and weekly consistency averages (activities/week, moving time/week). Includes an interactive activity-type breakdown donut chart, filterable by activity type.
 
-### 🏃 Activity Viewer
+### Activity Viewer
 Drill into second-by-second data for any individual session. Parses `.gpx` and `.fit` (including gzipped variants) to render:
 - A time-in-zone heart rate breakdown (5 zones, based on % of max HR)
 - Heart rate and elevation line charts over the course of the activity
 - Activity-specific KPIs (pace and distance for runs/rides, 100m pace for swims, a flat time-based intensity score for weight training)
 
-### 🫀 Aerobic Efficiency Trends
+### Aerobic Efficiency Trends
 Isolates steady-state runs (≥15 min moving time) and plots an efficiency ratio (grade-adjusted pace over average heart rate) with a 42-day rolling trend line, so you can see cardiovascular adaptation independent of day-to-day pacing choices.
 
 - **True Fitness (ML-adjusted view):** once you have 50+ steady-state runs with matched weather data, a linear regression model learns your personal heat stress penalty (bpm increase per 1° of heat index) and normalizes every run's heart rate to a standard 28°C / 80% humidity baseline, so adverse weather conditions do not mask genuine fitness gains. Temperature and humidity are combined into a single heat index feature (Rothfusz regression) rather than modeled as two separate variables, since they tend to be collinear in consistently warm/humid climates and their physiological effect on heart rate is multiplicative, not additive.
 - **Note:** the efficiency ratio's directionality (higher = fitter) assumes the underlying "pace" field increases with speed. If your export's pace column instead decreases as you get faster (i.e. is a true time-per-distance pace), the trend line's interpretation should be flipped accordingly.
 
-### 📊 Fitness, Fatigue & Form
+### Fitness, Fatigue & Form
 Implements the Banister TRIMP (Training Impulse) model:
 | Metric | Full Name | Window | Meaning |
 |---|---|---|---|
@@ -105,3 +105,4 @@ Physiological constants in `config.py` drive the TRIMP/CTL/ATL/TSB calculations 
 **Caveats:**
 - Weather enrichment (and therefore the ML "True Fitness" view) only applies to `Run` activities with GPS data.
 - Weight Training / Workout sessions don't get a heart-rate-derived TRIMP score — the model instead assumes a flat 40 TRIMP/hour, since HR tends to underestimate strength-training effort.
+- **The heat coefficient is associative, not causal.** It estimates how heart rate relates to heat index at a given pace, but it may also absorb other things that vary alongside heat, such as fitness changes over time or time of day (morning vs evening runs). Treat it as a rough personal estimate, not a precise physiological constant.
