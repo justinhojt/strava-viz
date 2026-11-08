@@ -1,5 +1,8 @@
 from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import TimeSeriesSplit
 import streamlit as st
+import numpy as np
+import statsmodels.api as sm
 
 from utils.data_loader import parse_csv
 from utils.functions import compute_heat_index
@@ -38,25 +41,43 @@ steady_runs['aero_ratio'] = steady_runs['Average Grade Adjusted Pace'] / steady_
 ml_df = steady_runs.dropna(subset=['Average Grade Adjusted Pace', 'hrr', 'temperature_2m', 'relative_humidity_2m']).copy()
 
 ml_df['heat_index'] = compute_heat_index(ml_df['temperature_2m'], ml_df['relative_humidity_2m'])
+ml_df = ml_df.sort_values('Activity Date')
 
 # Initialize ML state variables
 has_enough_data = (len(ml_df) >= config.ML_MIN_SAMPLES)
 model_trained = False
-coef_heat = 0.0
 
 if has_enough_data:
-    X = ml_df[['Average Grade Adjusted Pace', 'heat_index']]
+    features = ['Average Grade Adjusted Pace', 'heat_index']
+    base_features = ['Average Grade Adjusted Pace']    # pace only
+    hrr_range = hr_max - hr_rest
+    
+    maes, base_maes = [], []
+    for train_idx, test_idx in TimeSeriesSplit(n_splits=config.ML_CV_SPLITS).split(ml_df):
+        train, test = ml_df.iloc[train_idx], ml_df.iloc[test_idx]
+    
+        full = LinearRegression().fit(train[features], train['hrr'])
+        base = LinearRegression().fit(train[base_features], train['hrr'])
+    
+        maes.append(np.mean(np.abs(full.predict(test[features]) - test['hrr'])) * hrr_range)
+        base_maes.append(np.mean(np.abs(base.predict(test[base_features]) - test['hrr'])) * hrr_range)
+    
+    cv_mae, cv_std = np.mean(maes), np.std(maes)
+    base_mae = np.mean(base_maes)
+
+    X = ml_df[features]
     y = ml_df['hrr']
     
     model = LinearRegression()
     model.fit(X, y)
+
+    ols = sm.OLS(ml_df['hrr'], sm.add_constant(ml_df[features])).fit()
     
+    coef_heat_bpm = ols.params['heat_index'] * hrr_range
+    ci_low, ci_high = ols.conf_int().loc['heat_index'] * hrr_range
+        
     r_squared = model.score(X, y)
     n_samples = len(ml_df)
-    
-    coefs = dict(zip(X.columns, model.coef_))
-    coef_heat = coefs['heat_index']
-    coef_heat_bpm = coef_heat * (hr_max - hr_rest)
     
     # Define standard environmental baseline (28°C and 80% Humidity)
     standard_temp = config.ML_BASELINE_TEMP_C
@@ -67,8 +88,9 @@ if has_enough_data:
     X_standard = X.copy()
     X_standard['heat_index'] = standard_heat_index
     
-    # Predict hypothetical %HRR in standard conditions
-    ml_df['adjusted_hrr'] = model.predict(X_standard)
+    # Shift each run's actual %HRR by the modelled heat effect (keeps its residual)
+    ml_df['adjusted_hrr'] = ml_df['hrr'] + (model.predict(X_standard) - model.predict(X))
+    ml_df = ml_df[ml_df['adjusted_hrr'] > 0.05].copy()    # drop runs where the adjusted value is ~0 or negative
     
     # Recalculate efficiency using the normalized %HRR
     ml_df['adjusted_aero_ratio'] = ml_df['Average Grade Adjusted Pace'] / ml_df['adjusted_hrr']
@@ -77,15 +99,16 @@ if has_enough_data:
 # Only show the ML toggle if we actually have enough data to train the model safely
 use_ml = False
 if model_trained:
-    use_ml = use_ml = st.checkbox(f'🔮 **Show Weather-Adjusted True Fitness** (Normalized to Singapore Baseline {config.ML_BASELINE_TEMP_C:.0f}°C / {config.ML_BASELINE_HUMIDITY:.0f}% Humidity)', value=False)
+    use_ml = st.checkbox(f'🔮 **Show Weather-Adjusted True Fitness** (Normalized to Singapore Baseline {config.ML_BASELINE_TEMP_C:.0f}°C / {config.ML_BASELINE_HUMIDITY:.0f}% Humidity)', value=False)
+    st.caption(f'Chart shows the {len(ml_df)} steady-state runs with weather data.')
 elif len(steady_runs) > 0:
     st.info(f'Keep running! You need at least {config.ML_MIN_SAMPLES} steady-state runs with weather data to unlock ML True Fitness tracking. (Currently have {len(ml_df)})')
 
-# Determine which data to plot based on the user's toggle
-if use_ml and model_trained:
-    # Swap the metric temporarily for the plotting function
+# Use the same runs in both views so the toggle only changes the metric
+if model_trained:
     plot_df = ml_df.copy()
-    plot_df['aero_ratio'] = plot_df['adjusted_aero_ratio'] 
+    if use_ml:
+        plot_df['aero_ratio'] = plot_df['adjusted_aero_ratio']
 else:
     plot_df = steady_runs.copy()
 
@@ -106,15 +129,17 @@ if model_trained:
     st.write('Using linear regression against heat index (temperature + humidity combined), we can analyse how a specific body reacts to overall heat stress.')
     
     prof_col1, prof_col2, prof_col3 = st.columns(3)
-    
-    prof_col1.metric(label='🌡️ Heat Stress Penalty (per 1° Heat Index)', 
-              value=f'{coef_heat_bpm:+.2f} bpm',
-              delta='Heart Rate Impact', delta_color='inverse')
-    
-    prof_col2.metric(label='📊 Model Fit (R²)', value=f'{r_squared:.2f}')
-    prof_col3.metric(label='🔢 Runs Used', value=f'{n_samples}')
-        
-    st.caption('*Heat index combines temperature and humidity into a single "feels like" value, since humidity\'s physiological cost scales with heat rather than adding independently. Metric indicates how much heart rate increases to maintain the same pace as heat stress worsens. R² shows how much of the heart-rate variance the model explains — closer to 1 means the two features (pace, heat index) are more reliably driving the prediction.*')
+    prof_col1.metric('🌡️ Heat Penalty (per 1° HI)', f'{coef_heat_bpm:+.2f} bpm',
+                     delta=f'95% CI [{ci_low:.2f}, {ci_high:.2f}]', delta_color='off')
+    prof_col2.metric('🎯 CV MAE (full model)', f'{cv_mae:.1f} ± {cv_std:.1f} bpm',
+                     delta=f'pace-only: {base_mae:.1f} bpm', delta_color='off')
+    prof_col3.metric('📊 R² (in-sample)', f'{r_squared:.2f}')
+
+    st.caption(
+    f'Model fit on {n_samples} runs; chart shows {len(ml_df)} after dropping runs with adjusted %HRR ≤ 5%. R² is in-sample (fit on all runs).'
+    'CV MAE is the average error on held-out later runs (time-series CV), compared against a pace-only baseline.'
+    'The CI is a 95% interval on the heat coefficient. Heat index combines temperature and humidity into one value.'
+    )
     
 # Methodology Expander
 with st.expander('🔬 View Aerobic Efficiency Methodology'):
@@ -128,7 +153,7 @@ with st.expander('🔬 View Aerobic Efficiency Methodology'):
     ### 🧮 The Calculation
     This dashboard calculates efficiency for steady-state runs using the following ratio:
     
-    $$ \\text{Efficiency} = \\frac{\\text{Grade Adjusted Speed}}{\\text{Average Heart Rate}} $$
+    $$ \\text{Efficiency} = \\frac{\\text{Grade Adjusted Speed}}{\\text{\\% Heart Rate Reserve}} $$
     
     *Note: We specifically filter for "Steady State" runs with over 15 minutes of moving time and use Grade Adjusted metrics to ensure elevation changes and interval spikes do not heavily skew the data.*
     
@@ -137,7 +162,7 @@ with st.expander('🔬 View Aerobic Efficiency Methodology'):
     ### 🔮 True Fitness (Weather Normalization)
     If you live in an environment with distinct seasons or high heat, your raw efficiency will artificially drop in the summer due to cardiac drift, masking your actual fitness gains.
     
-    When **True Fitness** is enabled, a machine learning model isolates your pace and calculates what your heart rate *would have been* if the run occurred at a standard heat index equivalent to 28°C at 80% humidity — combining temperature and humidity into one "feels like" value rather than treating them as independent factors.
+    When **True Fitness** is enabled, a machine learning model isolates your pace and adjusts each run’s heart rate by the estimated heat effect, as if it had been run at a standard heat index of 28°C at 80% humidity — combining temperature and humidity into one "feels like" value rather than treating them as independent factors.
     
     ---
     
