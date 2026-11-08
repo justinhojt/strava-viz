@@ -5,6 +5,8 @@ import config
 from utils.data_loader import parse_csv
 from utils.plots import plot_donut
 
+st.set_page_config(layout='wide', page_title='Strava Analytics')
+
 # Load data into session state so other pages can see it
 if 'summary_df' not in st.session_state:
     st.session_state['summary_df'] = parse_csv()
