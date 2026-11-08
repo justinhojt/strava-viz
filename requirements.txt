@@ -5,3 +5,4 @@ numpy>=1.26.0
 gpxpy>=1.6.2
 fitparse>=1.2.0
 scikit-learn>=1.9.0
+statsmodels>=0.14.0
