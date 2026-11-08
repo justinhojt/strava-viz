@@ -53,6 +53,7 @@ ATL_DAY_SPAN = 7    # Acute Training Load (Fatigue)
 ML_MIN_SAMPLES = 50           # Minimum steady-state runs with weather data required to train the model
 ML_BASELINE_TEMP_C = 28.0     # Standard heat-index normalization baseline (Singapore climate)
 ML_BASELINE_HUMIDITY = 80.0
+ML_CV_SPLITS = 4
 
 TIMEZONE_TARGET = 'Asia/Singapore'
 TIMEZONE_OFFSET_HOURS = 8
