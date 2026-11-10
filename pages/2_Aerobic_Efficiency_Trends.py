@@ -136,9 +136,9 @@ if model_trained:
     prof_col3.metric('📊 R² (in-sample)', f'{r_squared:.2f}')
 
     st.caption(
-    f'Model fit on {n_samples} runs; chart shows {len(ml_df)} after dropping runs with adjusted %HRR ≤ 5%. R² is in-sample (fit on all runs).'
-    'CV MAE is the average error on held-out later runs (time-series CV), compared against a pace-only baseline.'
-    'The CI is a 95% interval on the heat coefficient. Heat index combines temperature and humidity into one value.'
+    f'Model fit on {n_samples} runs; chart shows {len(ml_df)} after dropping runs with adjusted %HRR ≤ 5%. R² is in-sample (fit on all runs). '
+    'CV MAE is the average error on held-out later runs (time-series CV), compared against a pace-only baseline. '
+    'The CI is a 95% interval on the heat coefficient. Heat index combines temperature and humidity into one value. '
     )
     
 # Methodology Expander
