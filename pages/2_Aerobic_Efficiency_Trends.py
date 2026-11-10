@@ -130,9 +130,9 @@ if model_trained:
     
     prof_col1, prof_col2, prof_col3 = st.columns(3)
     prof_col1.metric('🌡️ Heat Penalty (per 1° HI)', f'{coef_heat_bpm:+.2f} bpm',
-                     delta=f'95% CI [{ci_low:.2f}, {ci_high:.2f}]', delta_arrow='off')
+                     delta=f'95% CI [{ci_low:.2f}, {ci_high:.2f}]', delta_color='off', delta_arrow='off')
     prof_col2.metric('🎯 CV MAE (full model)', f'{cv_mae:.1f} ± {cv_std:.1f} bpm',
-                     delta=f'pace-only: {base_mae:.1f} bpm', delta_arrow='off')
+                     delta=f'pace-only: {base_mae:.1f} bpm', delta_color='off', delta_arrow='off')
     prof_col3.metric('📊 R² (in-sample)', f'{r_squared:.2f}')
 
     st.caption(
