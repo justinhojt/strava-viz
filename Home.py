@@ -12,8 +12,6 @@ if 'summary_df' not in st.session_state:
     st.session_state['summary_df'] = parse_csv()
 summary_df = st.session_state['summary_df']
 
-st.set_page_config(layout='wide', page_title='Strava Analytics')
-
 st.title('Strava Archive Analytics Dashboard')
 st.subheader('Lifetime Training Overview')
 
