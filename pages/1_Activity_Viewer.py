@@ -81,24 +81,23 @@ with top_left:
         r2_col1.metric('Training Intensity Score', trimp)
         
     elif selected_row['Activity Type'] == 'Swim':
-        # Slightly wider 3rd column to fit 100m pace
-        r1_col1, r1_col2, r1_col3 = st.columns([1, 1, 1.3])
+        r1_col1, r1_col2, r1_col3 = st.columns([1, 1, 1.4])
         r1_col1.metric('Distance', dist_m)
         r1_col2.metric('Moving Time', time)
         r1_col3.metric('Pace', pace_100m)
         
-        r2_col1, r2_col2, r2_col3 = st.columns([1, 1, 1.3])
+        r2_col1, r2_col2, r2_col3 = st.columns([1, 1, 1.4])
         r2_col1.metric('Average Heart Rate', avg_hr)
         r2_col2.metric('Maximum Heart Rate', max_hr)
         r2_col3.metric('Training Intensity Score', trimp)
 
     else:
-        r1_col1, r1_col2, r1_col3 = st.columns(3)
+        r1_col1, r1_col2, r1_col3 = st.columns([1, 1, 1.4])
         r1_col1.metric('Distance', dist_km)
         r1_col2.metric('Moving Time', time)
         r1_col3.metric('Pace', pace_km)
         
-        r2_col1, r2_col2, r2_col3 = st.columns(3)
+        r2_col1, r2_col2, r2_col3 = st.columns([1, 1, 1.4])
         r2_col1.metric('Average Heart Rate', avg_hr)
         r2_col2.metric('Maximum Heart Rate', max_hr)
         r2_col3.metric('Training Intensity Score', trimp)
