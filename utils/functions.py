@@ -143,3 +143,19 @@ def get_steady_runs(summary_df):
     
     runs['aero_ratio'] = runs['Average Grade Adjusted Pace'] / runs['hrr']
     return runs
+
+# Names each cluster from its average distance and effort vs the overall median
+def name_clusters(df):
+    med_dist = df['distance_km'].median()
+    med_hrr = df['hrr'].median()
+    means = df.groupby('Cluster')[['distance_km', 'hrr']].mean()
+
+    names = {}
+    for c, row in means.iterrows():
+        length = 'Long' if row['distance_km'] > med_dist else 'Short'
+        effort = 'hard' if row['hrr'] > med_hrr else 'easy'
+        names[c] = f'{length} & {effort}'
+
+    # If two clusters get the same name, add the cluster number so the legend stays unique
+    counts = pd.Series(names).value_counts()
+    return {c: n if counts[n] == 1 else f'{n} (#{c})' for c, n in names.items()}
