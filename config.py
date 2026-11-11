@@ -60,3 +60,7 @@ ML_CV_SPLITS = 4
 
 TIMEZONE_TARGET = 'Asia/Singapore'
 TIMEZONE_OFFSET_HOURS = 8
+
+# K-means run clustering
+KMEANS_MAX_K = 6        # silhouette loop tries k = 2..KMEANS_MAX_K
+KMEANS_MIN_RUNS = 20    # minimum runs before clustering is worthwhile
