@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 
-from utils.data_loader import parse_gpx, parse_fit
 import config
 
 # Calculates cumulative TRIMP score using time-series data
