@@ -166,6 +166,19 @@ def extract_start_coords(filename):
         tqdm.write(f'   ❌ [Parsing Error] Failed to read {filename}: {e}')
     return None, None
 
+# Loads weather already fetched in a previous run, so we don't call the API again
+def load_cached_weather():
+    cols = ['temperature_2m', 'relative_humidity_2m', 'wind_speed_10m']
+    if not os.path.exists(OUTPUT_PATH):
+        return {}
+
+    old = pd.read_csv(OUTPUT_PATH)
+    if not all(c in old.columns for c in cols):
+        return {}
+
+    old = old.dropna(subset=cols).drop_duplicates('Filename')    # failed fetches (NaN) get retried
+    return old.set_index('Filename')[cols].to_dict('index')
+
 def main():
     print(f'Loading and cleaning {CSV_PATH}...')
     df = clean_csv(CSV_PATH)
@@ -182,7 +195,10 @@ def main():
     df['Activity Date'] = df['Activity Date'].astype(object)    # Cast column to object type to provide fallback protection against PyArrow
     
     tzf = TimezoneFinder()
-    
+
+    cached_weather = load_cached_weather()
+    print(f'Reusing weather for {len(cached_weather)} activities.')
+
     # Spin up persistent connection session
     with requests.Session() as session:
         for index, row in tqdm(df.iterrows(), total=df.shape[0], desc='Processing Activities'):
@@ -245,14 +261,20 @@ def main():
             
             # Fetch weather data for runs with gps coordinates
             if is_run and lat is not None and lon is not None:
-                duration_seconds = row.get('Elapsed Time', row.get('Moving Time', 0))
-                weather = get_weather_with_timeout(session, lat, lon, localized_date, duration_seconds)
-                
-                df.at[index, 'temperature_2m'] = weather['temp']
-                df.at[index, 'relative_humidity_2m'] = weather['humidity']
-                df.at[index, 'wind_speed_10m'] = weather['wind']
-                
-                time.sleep(0.1)   # Respect rate limits
+                if filename in cached_weather:
+                    saved = cached_weather[filename]
+                    df.at[index, 'temperature_2m'] = saved['temperature_2m']
+                    df.at[index, 'relative_humidity_2m'] = saved['relative_humidity_2m']
+                    df.at[index, 'wind_speed_10m'] = saved['wind_speed_10m']
+                else:
+                    duration_seconds = row.get('Elapsed Time', row.get('Moving Time', 0))
+                    weather = get_weather_with_timeout(session, lat, lon, localized_date, duration_seconds)
+
+                    df.at[index, 'temperature_2m'] = weather['temp']
+                    df.at[index, 'relative_humidity_2m'] = weather['humidity']
+                    df.at[index, 'wind_speed_10m'] = weather['wind']
+
+                    time.sleep(0.1)   # Respect rate limits
         
     df.to_csv(OUTPUT_PATH, index=False)
     print(f'\nSuccess! Dataset safely saved to {OUTPUT_PATH}')
