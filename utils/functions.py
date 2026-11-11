@@ -40,70 +40,20 @@ def get_trimp_for_row(row, time_series_df=None):
     return trimp
 
 # Parses all granular data
-@st.cache_data(show_spinner='Calculating historical training load metrics...')
+@st.cache_data
 def parse_granular(df):
-    workout_records = []
+    daily = df.groupby(df['Activity Date'].dt.normalize())['trimp'].sum()
+    daily = daily[daily > 0].rename('trimps')
 
-    for index, row in df.iterrows():
-        target_filename = row.get('Filename') 
-        activity_date = row.get('Activity Date')       
-        activity_type = row.get('Activity Type') 
-        
-        trimp_score = 0
-        file_parsed_successfully = False
+    if daily.empty:
+        return pd.DataFrame(columns=['Date', 'trimps', 'CTL', 'ATL', 'TSB'])
 
-        # If activity file exists, parse it and calculate TRIMP score
-        if not pd.isna(target_filename): 
-            try:
-                if target_filename.endswith('.gpx') or target_filename.endswith('.gpx.gz'):
-                    time_series_df = parse_gpx(target_filename)
-                elif target_filename.endswith('.fit') or target_filename.endswith('.fit.gz'):
-                    time_series_df = parse_fit(target_filename)
-                else:
-                    raise ValueError(f'Unsupported file format: {target_filename}')
-                
-                file_parsed_successfully = True
-                trimp_score = get_trimp_for_row(row, time_series_df)
-                
-            except Exception as e:
-                st.warning(f'⚠️ Failed to parse {target_filename}: {e}')
-                trimp_score = get_trimp_for_row(row, None)
-        
-        if trimp_score > 0 or file_parsed_successfully:
-            workout_records.append({
-                'Date': activity_date,
-                'trimps': trimp_score
-            })
-            
-    if not workout_records:
-        return pd.DataFrame(columns=['Date', 'trimps', 'CTL', 'ATL', 'TSB'])
-        
-    summary_df = pd.DataFrame(workout_records)
-    summary_df['Date'] = pd.to_datetime(summary_df['Date']).dt.normalize()
-    
-    daily_stress = summary_df.groupby('Date')['trimps'].sum().reset_index()
-    daily_stress.set_index('Date', inplace=True)
-    
-    active_days = daily_stress[daily_stress['trimps'] > 0]
-    if not active_days.empty:
-        start_date = active_days.index.min()
-    else:
-        start_date = daily_stress.index.min()
-        
-    if pd.isna(start_date):
-        return pd.DataFrame(columns=['Date', 'trimps', 'CTL', 'ATL', 'TSB'])
-        
-    end_date = pd.to_datetime('today').normalize()
-    full_range = pd.date_range(start=start_date, end=end_date, freq='D')
-    
-    trimps = daily_stress.reindex(full_range, fill_value=0).reset_index()
-    trimps.rename(columns={'index': 'Date'}, inplace=True)
-    
-    trimps['CTL'] = trimps['trimps'].ewm(alpha=1/config.CTL_DAY_SPAN, adjust=False).mean()    # 42 day exponentially weighted moving average
-    trimps['ATL'] = trimps['trimps'].ewm(alpha=1/config.ATL_DAY_SPAN, adjust=False).mean()     # 7 day exponentially weighted moving average
-    trimps['TSB'] = trimps['CTL'].shift(1) - trimps['ATL'].shift(1)
-    trimps['TSB'] = trimps['TSB'].fillna(0)
-    
+    full_range = pd.date_range(daily.index.min(), pd.Timestamp.today().normalize())
+    trimps = daily.reindex(full_range, fill_value=0).rename_axis('Date').reset_index()
+
+    trimps['CTL'] = trimps['trimps'].ewm(alpha=1/config.CTL_DAY_SPAN, adjust=False).mean()
+    trimps['ATL'] = trimps['trimps'].ewm(alpha=1/config.ATL_DAY_SPAN, adjust=False).mean()
+    trimps['TSB'] = (trimps['CTL'].shift(1) - trimps['ATL'].shift(1)).fillna(0)
     return trimps
 
 # Computes heat index (Rothfusz regression) to collapse temp + humidity into a single
