@@ -67,7 +67,7 @@ seconds_km = selected_row['Moving Time'] / (selected_row['Distance'] / 1000) if 
 pace_km = f'{seconds_km // 60:.0f}m {seconds_km % 60:.0f}s/km'
 
 # 60/40 split for KPIs and chart
-top_left, top_right = st.columns([1.5, 1])
+top_left, top_right = st.columns([1.7, 1])
 
 # KPIs
 with top_left:
