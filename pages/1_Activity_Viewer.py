@@ -67,7 +67,7 @@ seconds_km = selected_row['Moving Time'] / (selected_row['Distance'] / 1000) if 
 pace_km = f'{seconds_km // 60:.0f}m {seconds_km % 60:.0f}s/km'
 
 # 60/40 split for KPIs and chart
-top_left, top_right = st.columns([1.7, 1])
+top_left, top_right = st.columns([1.8, 1])
 
 # KPIs
 with top_left:
@@ -81,23 +81,23 @@ with top_left:
         r2_col1.metric('Training Intensity Score', trimp)
         
     elif selected_row['Activity Type'] == 'Swim':
-        r1_col1, r1_col2, r1_col3 = st.columns([1, 1, 1.4])
+        r1_col1, r1_col2, r1_col3 = st.columns([1, 1, 1.5])
         r1_col1.metric('Distance', dist_m)
         r1_col2.metric('Moving Time', time)
         r1_col3.metric('Pace', pace_100m)
         
-        r2_col1, r2_col2, r2_col3 = st.columns([1, 1, 1.4])
+        r2_col1, r2_col2, r2_col3 = st.columns([1, 1, 1.5])
         r2_col1.metric('Average Heart Rate', avg_hr)
         r2_col2.metric('Maximum Heart Rate', max_hr)
         r2_col3.metric('Training Intensity Score', trimp)
 
     else:
-        r1_col1, r1_col2, r1_col3 = st.columns([1, 1, 1.4])
+        r1_col1, r1_col2, r1_col3 = st.columns([1, 1, 1.5])
         r1_col1.metric('Distance', dist_km)
         r1_col2.metric('Moving Time', time)
         r1_col3.metric('Pace', pace_km)
         
-        r2_col1, r2_col2, r2_col3 = st.columns([1, 1, 1.4])
+        r2_col1, r2_col2, r2_col3 = st.columns([1, 1, 1.5])
         r2_col1.metric('Average Heart Rate', avg_hr)
         r2_col2.metric('Maximum Heart Rate', max_hr)
         r2_col3.metric('Training Intensity Score', trimp)
