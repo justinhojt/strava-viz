@@ -49,6 +49,9 @@ DEFAULT_GENDER = 'male'
 CTL_DAY_SPAN = 42   # Chronic Training Load (Fitness)
 ATL_DAY_SPAN = 7    # Acute Training Load (Fatigue)
 
+MIN_RUNS = 30                # Minimum runs needed for a meaningful CV
+BASELINE_WINDOW = '42D'      # Rolling average window for the baseline
+
 # Aerobic Efficiency / Heat Stress ML Model
 ML_MIN_SAMPLES = 50           # Minimum steady-state runs with weather data required to train the model
 ML_BASELINE_TEMP_C = 28.0     # Standard heat-index normalization baseline (Singapore climate)
