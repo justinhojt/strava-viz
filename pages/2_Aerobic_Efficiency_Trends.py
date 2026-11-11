@@ -5,7 +5,7 @@ import numpy as np
 import statsmodels.api as sm
 
 from utils.data_loader import parse_csv
-from utils.functions import compute_heat_index
+from utils.functions import compute_heat_index, get_steady_runs
 from utils.plots import plot_aero
 import config
 
@@ -18,13 +18,7 @@ else:
 st.subheader('🫀 Aerobic Efficiency Trends')
 st.write('Runs with over 15 minutes of moving time')
 
-runs = summary_df[summary_df['Activity Type'] == 'Run'].copy()
-steady_runs = runs[runs['workout_style'] == 'Steady State'].copy()
-
-# Filter for valid pacing/HR and minimum moving time
-steady_runs = steady_runs[(steady_runs['Average Grade Adjusted Pace'] > 0) & 
-                          (steady_runs['Average Heart Rate'] > 0) & 
-                          (steady_runs['Moving Time'] >= 900)]
+steady_runs = get_steady_runs(summary_df)
 
 # Heart Rate Reserve (HRR) corrects for resting HR offset so effort = 0 maps to denominator = 0,
 # instead of dividing directly by raw avg_hr which has a nonzero floor at rest
