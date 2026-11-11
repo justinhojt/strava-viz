@@ -124,3 +124,22 @@ def compute_heat_index(temp_c, rh):
     
     hi_f = np.where((temp_f + hi_simple) / 2 >= 80, hi_rothfusz, hi_simple)
     return (hi_f - 32) * 5 / 9
+
+# Returns valid steady-state runs with %HRR and the raw aerobic efficiency ratio
+def get_steady_runs(summary_df):
+    runs = summary_df[(summary_df['Activity Type'] == 'Run') & 
+                      (summary_df['workout_style'] == 'Steady State')].copy()
+    
+    # Filter for valid pacing/HR and minimum moving time (15 min)
+    runs = runs[(runs['Average Grade Adjusted Pace'] > 0) & 
+                (runs['Average Heart Rate'] > 0) & 
+                (runs['Moving Time'] >= 900)]
+    
+    # Heart Rate Reserve corrects for the resting HR offset
+    hr_rest = config.DEFAULT_HR_REST
+    hr_max = config.DEFAULT_HR_MAX
+    runs['hrr'] = (runs['Average Heart Rate'] - hr_rest) / (hr_max - hr_rest)
+    runs = runs[runs['hrr'] > 0.05]    # Removes likely sensor errors
+    
+    runs['aero_ratio'] = runs['Average Grade Adjusted Pace'] / runs['hrr']
+    return runs
