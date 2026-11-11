@@ -177,6 +177,7 @@ def main():
     df['wind_speed_10m'] = None
     df['workout_style'] = 'Unknown'
     df['local_tz'] = config.TIMEZONE_TARGET
+    df['trimp'] = 0.0
     
     df['Activity Date'] = df['Activity Date'].astype(object)    # Cast column to object type to provide fallback protection against PyArrow
     
@@ -205,6 +206,19 @@ def main():
                 df.at[index, 'workout_style'] = style
             
             lat, lon = extract_start_coords(filename)
+
+            try:
+                if filename.endswith(('.gpx', '.gpx.gz')):
+                    ts_df = parse_gpx(filename)
+                elif filename.endswith(('.fit', '.fit.gz')):
+                    ts_df = parse_fit(filename)
+                else:
+                    ts_df = None
+            except Exception as e:
+                tqdm.write(f'   ❌ Could not parse {filename} for TRIMP: {e}')
+                ts_df = None
+
+            df.at[index, 'trimp'] = get_trimp_for_row(row, ts_df)
                 
             # Find the local timezone
             if lat is not None and lon is not None:
