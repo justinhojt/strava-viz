@@ -164,3 +164,35 @@ def plot_ele_series(df):
         x=alt.X('graph_timestamp:T', title='Time'),
         y=alt.Y('elevation:Q', title='Elevation (m)', scale=alt.Scale(zero=False))
     )
+
+# Plots silhouette score for each candidate k
+def plot_silhouette(scores_df):
+    return alt.Chart(scores_df).mark_line(
+        color=config.COLOR_STRAVA_ORANGE, point=True, strokeWidth=2
+    ).encode(
+        x=alt.X('k:O', title='Number of clusters (k)', axis=alt.Axis(labelAngle=0)),
+        y=alt.Y('score:Q', title='Silhouette score', scale=alt.Scale(zero=False)),
+        tooltip=['k:O', alt.Tooltip('score:Q', format='.3f')]
+    ).properties(height=250)
+
+# Plots aerobic efficiency coloured by cluster, with a 42-day trend line per cluster
+def plot_cluster_efficiency(df):
+    df = df.sort_values('Activity Date').copy()
+    df['moving_avg'] = df.groupby('Cluster Name', group_keys=False).apply(
+        lambda g: g.rolling('42D', on='Activity Date')['aero_ratio'].mean()
+    )
+    df['graph_date'] = df['Activity Date'].dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+    base = alt.Chart(df).encode(
+        x=alt.X('graph_date:T', title='Date'),
+        color=alt.Color('Cluster Name:N', title='Run type')
+    )
+
+    points = base.mark_circle(size=50, opacity=0.5).encode(
+        y=alt.Y('aero_ratio:Q', title='Efficiency ratio', scale=alt.Scale(zero=False)),
+        tooltip=[alt.Tooltip('graph_date:T', title='Date', format='%Y-%m-%d'),
+                 'Cluster Name:N', 'aero_ratio:Q']
+    )
+    lines = base.mark_line(size=3).encode(y='moving_avg:Q')
+
+    return alt.layer(points, lines).properties(height=400)
