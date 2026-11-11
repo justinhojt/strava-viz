@@ -12,6 +12,9 @@ from timezonefinder import TimezoneFinder
 from fitparse import FitFile
 from tqdm import tqdm
 
+from utils.data_loader import parse_gpx, parse_fit
+from utils.functions import get_trimp_for_row
+
 # Globally disable logging warnings to keep our progress bar clean
 logging.disable(logging.WARNING)
 
