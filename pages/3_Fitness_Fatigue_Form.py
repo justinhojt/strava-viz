@@ -22,7 +22,7 @@ st.subheader('Historical Performance Analysis')
 
 # Date slider
 min_date = trimps['Date'].min().to_pydatetime() # Streamlit uses python datetime instead of pandas datetime
-max_date = summary_df['Activity Date'].max().to_pydatetime()
+max_date = summary_df['Activity Date'].max().normalize().to_pydatetime()
 
 selected_date = st.slider(
     '📅 Use the slider to view stats for that day:',
@@ -31,6 +31,7 @@ selected_date = st.slider(
     value=max_date,  
     format='YYYY-MM-DD'
 )
+selected_date = pd.Timestamp(selected_date).normalize()
 
 # Filter the metrics down to the single selected day
 matched_row = trimps[trimps['Date'] == pd.Timestamp(selected_date)]
