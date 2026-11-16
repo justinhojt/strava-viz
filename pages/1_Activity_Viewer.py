@@ -114,9 +114,12 @@ with top_right:
         
         # Map each second of data to a zone
         time_series_df['HR_Zone'] = pd.cut(time_series_df['heart_rate'], bins=bins, labels=labels)
+
+        # Seconds elapsed since the previous reading
+        gap_s = time_series_df['timestamp'].diff().dt.total_seconds().fillna(1.0)
+        gap_s = gap_s.clip(upper=10)  # ignore long auto-pause gaps
         
-        # Aggregate time 
-        zone_counts = time_series_df['HR_Zone'].value_counts().reset_index()    # reset_index() to change zone from index to column
+        zone_counts = gap_s.groupby(time_series_df['HR_Zone'], observed=False).sum().reset_index()
         zone_counts.columns = ['Zone', 'Time (s)']
         zone_counts['Minutes'] = zone_counts['Time (s)'] / 60
         
