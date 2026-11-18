@@ -58,7 +58,7 @@ else:
     avg_weekly_hours = 0
     avg_weekly_minutes = 0
 
-st.subheader('⚡ Core Metrics')
+st.subheader('Core Metrics')
 
 # 60/40 split for KPIs and chart
 top_left, top_right = st.columns([1.5, 1])
