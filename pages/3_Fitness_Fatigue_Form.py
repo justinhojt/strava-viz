@@ -6,7 +6,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import TimeSeriesSplit
 
 from utils.data_loader import parse_csv
-from utils.functions import parse_granular
+from utils.functions import parse_granular, get_steady_runs
 from utils.plots import plot_fitness_fatigue, plot_tsb_zones
 import config
 
@@ -90,16 +90,8 @@ predictor = predictor_options[predictor_label]
 form_df = trimps[['Date', 'TSB', 'CTL']].copy()
 form_df['CTL_prev'] = form_df['CTL'].shift(1)
 
-# Steady-state runs, same filters and efficiency ratio as the Aerobic Efficiency page
-runs = summary_df[(summary_df['Activity Type'] == 'Run') & (summary_df['workout_style'] == 'Steady State')].copy()
-runs = runs[(runs['Average Grade Adjusted Pace'] > 0) & 
-            (runs['Average Heart Rate'] > 0) & 
-            (runs['Moving Time'] >= 900)]
-
-runs['hrr'] = (runs['Average Heart Rate'] - config.DEFAULT_HR_REST) / (config.DEFAULT_HR_MAX - config.DEFAULT_HR_REST)
-runs = runs[runs['hrr'] > 0.05]
-runs['aero_ratio'] = runs['Average Grade Adjusted Pace'] / runs['hrr']
-runs = runs.sort_values('Activity Date')
+# Steady-state runs with the same filters and efficiency ratio as the Aerobic Efficiency page
+runs = get_steady_runs(summary_df).sort_values('Activity Date')
 
 # Baseline: average efficiency over the previous 42 days (closed='left' excludes the run itself)
 runs['baseline'] = runs.rolling(config.BASELINE_WINDOW, on='Activity Date', closed='left')['aero_ratio'].mean()
