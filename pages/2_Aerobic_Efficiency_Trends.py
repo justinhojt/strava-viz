@@ -57,7 +57,7 @@ if has_enough_data:
     base_mae = np.mean(base_maes)
 
     # temp
-    def cv_mae(cols):
+def cv_mae(cols):
     maes = []
     for tr, te in TimeSeriesSplit(n_splits=config.ML_CV_SPLITS).split(ml_df):
         m = LinearRegression().fit(ml_df.iloc[tr][cols], ml_df.iloc[tr]['hrr'])
