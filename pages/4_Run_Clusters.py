@@ -5,7 +5,7 @@ from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import StandardScaler
 
 from utils.data_loader import parse_csv
-from utils.functions import name_clusters
+from utils.functions import name_clusters, get_steady_runs
 from utils.plots import plot_silhouette, plot_cluster_efficiency
 import config
 
@@ -19,14 +19,7 @@ st.subheader('🧩 Run Types (K-means Clustering)')
 st.write('Groups your steady-state runs by distance, pace and effort, then checks whether each group is getting more efficient.')
 
 # Same filters as the Aerobic Efficiency page
-runs = summary_df[(summary_df['Activity Type'] == 'Run') & (summary_df['workout_style'] == 'Steady State')].copy()
-runs = runs[(runs['Average Grade Adjusted Pace'] > 0) &
-            (runs['Average Heart Rate'] > 0) &
-            (runs['Moving Time'] >= 900)]
-
-runs['hrr'] = (runs['Average Heart Rate'] - config.DEFAULT_HR_REST) / (config.DEFAULT_HR_MAX - config.DEFAULT_HR_REST)
-runs = runs[runs['hrr'] > 0.05]
-runs['aero_ratio'] = runs['Average Grade Adjusted Pace'] / runs['hrr']
+runs = get_steady_runs(summary_df)
 runs['distance_km'] = runs['Distance'] / 1000
 runs = runs.dropna(subset=['distance_km', 'Average Grade Adjusted Pace', 'hrr'])
 
