@@ -25,21 +25,14 @@ ml_df = steady_runs.dropna(subset=['Average Grade Adjusted Pace', 'hrr', 'temper
 
 ml_df['heat_index'] = compute_heat_index(ml_df['temperature_2m'], ml_df['relative_humidity_2m'])
 ml_df = ml_df.sort_values('Activity Date')
+ml_df['duration_min'] = ml_df['Moving Time'] / 60    # minutes, so the coefficient is readable
 
 # Initialize ML state variables
 has_enough_data = (len(ml_df) >= config.ML_MIN_SAMPLES)
 model_trained = False
 
 if has_enough_data:
-    trimps = parse_granular(summary_df.copy())
-    trimps['CTL_prev'] = trimps['CTL'].shift(1)
-    
-    ml_df['Date'] = ml_df['Activity Date'].dt.normalize()
-    ml_df = (ml_df.merge(trimps[['Date', 'CTL_prev']], on='Date', how='left')
-                  .dropna(subset=['CTL_prev'])
-                  .sort_values('Activity Date'))   # keep time order for TimeSeriesSplit
-    
-    features = ['Average Grade Adjusted Pace', 'heat_index', 'CTL_prev']
+    features = ['Average Grade Adjusted Pace', 'heat_index', 'duration_min']
     base_features = ['Average Grade Adjusted Pace']    # pace only
     hrr_range = config.DEFAULT_HR_MAX - config.DEFAULT_HR_REST
     
@@ -55,19 +48,6 @@ if has_enough_data:
     
     cv_mae, cv_std = np.mean(maes), np.std(maes)
     base_mae = np.mean(base_maes)
-
-    # temp
-    def cv_mae(cols):
-        maes = []
-        for tr, te in TimeSeriesSplit(n_splits=config.ML_CV_SPLITS).split(ml_df):
-            m = LinearRegression().fit(ml_df.iloc[tr][cols], ml_df.iloc[tr]['hrr'])
-            err = np.abs(m.predict(ml_df.iloc[te][cols]) - ml_df.iloc[te]['hrr'])
-            maes.append(err.mean() * hrr_range)
-        return np.mean(maes)
-
-    pace = ['Average Grade Adjusted Pace']
-    for cols in [pace + ['heat_index'], pace + ['heat_index', 'Moving Time']]:
-        st.write(cols, round(cv_mae(cols), 2))
 
     X = ml_df[features]
     y = ml_df['hrr']
