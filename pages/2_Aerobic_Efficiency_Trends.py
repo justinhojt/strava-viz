@@ -5,7 +5,7 @@ import numpy as np
 import statsmodels.api as sm
 
 from utils.data_loader import parse_csv
-from utils.functions import compute_heat_index, get_steady_runs
+from utils.functions import compute_heat_index, get_steady_runs, parse_granular
 from utils.plots import plot_aero
 import config
 
@@ -31,7 +31,15 @@ has_enough_data = (len(ml_df) >= config.ML_MIN_SAMPLES)
 model_trained = False
 
 if has_enough_data:
-    features = ['Average Grade Adjusted Pace', 'heat_index']
+    trimps = parse_granular(summary_df.copy())
+    trimps['CTL_prev'] = trimps['CTL'].shift(1)
+    
+    ml_df['Date'] = ml_df['Activity Date'].dt.normalize()
+    ml_df = (ml_df.merge(trimps[['Date', 'CTL_prev']], on='Date', how='left')
+                  .dropna(subset=['CTL_prev'])
+                  .sort_values('Activity Date'))   # keep time order for TimeSeriesSplit
+    
+    features = ['Average Grade Adjusted Pace', 'heat_index', 'CTL_prev']
     base_features = ['Average Grade Adjusted Pace']    # pace only
     hrr_range = config.DEFAULT_HR_MAX - config.DEFAULT_HR_REST
     
