@@ -56,6 +56,19 @@ if has_enough_data:
     cv_mae, cv_std = np.mean(maes), np.std(maes)
     base_mae = np.mean(base_maes)
 
+    # temp
+    def cv_mae(cols):
+    maes = []
+    for tr, te in TimeSeriesSplit(n_splits=config.ML_CV_SPLITS).split(ml_df):
+        m = LinearRegression().fit(ml_df.iloc[tr][cols], ml_df.iloc[tr]['hrr'])
+        err = np.abs(m.predict(ml_df.iloc[te][cols]) - ml_df.iloc[te]['hrr'])
+        maes.append(err.mean() * hrr_range)
+    return np.mean(maes)
+
+    pace = ['Average Grade Adjusted Pace']
+    for cols in [pace, pace + ['heat_index'], pace + ['CTL_prev'], features]:
+        st.write(cols, round(cv_mae(cols), 2))
+
     X = ml_df[features]
     y = ml_df['hrr']
     
