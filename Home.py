@@ -81,7 +81,7 @@ with top_right:
 
 st.markdown('---')
 
-st.subheader('⭐ Performance Highs & Consistency')
+st.subheader('Performance Highs & Consistency')
 ext_col1, ext_col2, ext_col3, ext_col4 = st.columns(4)
 
 ext_col1.metric('⛰️ Total Elevation Gain', f'{total_elevation:,.0f} m')
