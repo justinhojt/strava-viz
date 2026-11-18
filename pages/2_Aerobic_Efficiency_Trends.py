@@ -66,7 +66,7 @@ if has_enough_data:
         return np.mean(maes)
 
     pace = ['Average Grade Adjusted Pace']
-    for cols in [pace, pace + ['heat_index'], pace + ['CTL_prev'], features]:
+    for cols in [pace + ['heat_index'], pace + ['heat_index', 'Moving Time']]:
         st.write(cols, round(cv_mae(cols), 2))
 
     X = ml_df[features]
