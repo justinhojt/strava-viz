@@ -20,17 +20,6 @@ st.write('Runs with over 15 minutes of moving time')
 
 steady_runs = get_steady_runs(summary_df)
 
-# Heart Rate Reserve (HRR) corrects for resting HR offset so effort = 0 maps to denominator = 0,
-# instead of dividing directly by raw avg_hr which has a nonzero floor at rest
-hr_rest = config.DEFAULT_HR_REST
-hr_max = config.DEFAULT_HR_MAX
-
-steady_runs['hrr'] = (steady_runs['Average Heart Rate'] - hr_rest) / (hr_max - hr_rest)
-steady_runs = steady_runs[steady_runs['hrr'] > 0.05]    # Removes outliers where avg HR during activity is only slightly above rest, likely due to sensor error 
-
-# Calculate raw efficiency using %HRR instead of raw average heart rate
-steady_runs['aero_ratio'] = steady_runs['Average Grade Adjusted Pace'] / steady_runs['hrr']
-
 # Filter out runs missing weather data for the ML model
 ml_df = steady_runs.dropna(subset=['Average Grade Adjusted Pace', 'hrr', 'temperature_2m', 'relative_humidity_2m']).copy()
 
@@ -44,7 +33,7 @@ model_trained = False
 if has_enough_data:
     features = ['Average Grade Adjusted Pace', 'heat_index']
     base_features = ['Average Grade Adjusted Pace']    # pace only
-    hrr_range = hr_max - hr_rest
+    hrr_range = config.DEFAULT_HR_MAX - config.DEFAULT_HR_REST
     
     maes, base_maes = [], []
     for train_idx, test_idx in TimeSeriesSplit(n_splits=config.ML_CV_SPLITS).split(ml_df):
