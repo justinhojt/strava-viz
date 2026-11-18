@@ -57,7 +57,10 @@ if not matched_row.empty:
         status, color = 'Fresh / Recovery', 'normal'
         
     col3.metric('Form (TSB)', f'{tsb:.2f}', delta=status, delta_color=color)
-
+    
+    st.caption('CTL and ATL are end-of-day values. TSB is the form going into the day '
+               '(the previous day\'s CTL − ATL), so it won\'t equal CTL − ATL for the same date.')
+    
 st.markdown('---')
 
 # Charts and documentation
