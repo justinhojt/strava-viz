@@ -64,3 +64,28 @@ TIMEZONE_OFFSET_HOURS = 8
 # K-means run clustering
 KMEANS_MAX_K = 6        # silhouette loop tries k = 2..KMEANS_MAX_K
 KMEANS_MIN_RUNS = 20    # minimum runs before clustering is worthwhile
+
+#temp
+STRAVA_ACCENT = '#FC4C02'
+CHART_SECONDARY = '#4D769B'
+
+UI_BACKGROUND = '#FAFAF8'
+UI_TEXT = '#1E2938'
+UI_MUTED_TEXT = '#596779'
+
+CHART_CATEGORICAL_COLORS = (
+    STRAVA_ACCENT,
+    CHART_SECONDARY,
+    '#527B68',
+    '#8B709C',
+    '#9C784C',
+    '#687486',
+    '#52818D',
+    '#A66E82',
+)
+
+ACTIVITY_MIX_COLORS = {
+    'Run': STRAVA_ACCENT,
+    'Workout': CHART_SECONDARY,
+    'Walk': CHART_CATEGORICAL_COLORS[2],
+}
