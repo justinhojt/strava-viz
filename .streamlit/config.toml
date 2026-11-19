@@ -1,0 +1,13 @@
+[theme]
+base = "light"
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+headingFontSizes = ["2.25rem", "1.125rem", "1.06rem", "1rem", "0.94rem", "0.875rem"]
+primaryColor = "#FC4C02"
+backgroundColor = "#FAFAF8"
+secondaryBackgroundColor = "#F0F2F4"
+textColor = "#1E2938"
+borderColor = "#E1E5EA"
+chartCategoricalColors = [
+    "#FC4C02", "#4D769B", "#527B68", "#8B709C",
+    "#9C784C", "#687486", "#52818D", "#A66E82",
+]
