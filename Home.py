@@ -1,91 +1,216 @@
-import streamlit as st
-import altair as alt
-import config
+from itertools import cycle
 
+import altair as alt
+import pandas as pd
+import streamlit as st
+
+import config
 from utils.data_loader import parse_csv
-from utils.plots import plot_donut
+
+
+def activity_mix_chart(activities):
+    counts = (
+        activities.astype('string').fillna('Unspecified').value_counts()
+        .rename_axis('Activity')
+        .reset_index(name='Count')
+    )
+    total = counts['Count'].sum()
+    counts['Share'] = counts['Count'] / total
+    counts['Order'] = range(len(counts))
+    counts['Slice label'] = counts['Share'].map(
+        lambda share: f'{share:.0%}' if share >= 0.07 else ''
+    )
+    counts['Legend'] = [
+        f'{activity} · {share:.1%}'
+        for activity, share in zip(counts['Activity'], counts['Share'])
+    ]
+
+    colors = config.ACTIVITY_MIX_COLORS.copy()
+    extra_colors = cycle(config.CHART_CATEGORICAL_COLORS[3:])
+    for activity in sorted(set(counts['Activity']) - colors.keys()):
+        colors[activity] = next(extra_colors)
+
+    base = alt.Chart(counts).encode(
+        theta=alt.Theta('Count:Q').stack(True),
+        order=alt.Order('Order:Q', sort='ascending'),
+        detail='Activity:N',
+    )
+    arcs = base.mark_arc(
+        innerRadius=46,
+        outerRadius=68,
+        stroke=config.UI_BACKGROUND,
+        strokeWidth=2,
+    ).encode(
+        color=alt.Color(
+            'Legend:N',
+            scale=alt.Scale(
+                domain=counts['Legend'].tolist(),
+                range=counts['Activity'].map(colors).tolist(),
+            ),
+            legend=alt.Legend(title=None, orient='right', labelLimit=190),
+        ),
+        tooltip=[
+            alt.Tooltip('Activity:N'),
+            alt.Tooltip('Count:Q', title='Activities', format=',d'),
+            alt.Tooltip('Share:Q', format='.1%'),
+        ],
+    )
+    labels = base.mark_text(
+        radius=83, size=11, color=config.UI_TEXT,
+    ).encode(text='Slice label:N')
+
+    center = alt.Chart(pd.DataFrame({'Total': [f'{total:,}']}))
+    count = center.mark_text(
+        dy=-8, size=25, fontWeight=600, color=config.UI_TEXT,
+    ).encode(text='Total:N')
+    caption = center.mark_text(
+        dy=13, size=11, color=config.UI_MUTED_TEXT,
+    ).encode(text=alt.value('activities'))
+
+    return (
+        alt.layer(arcs, labels, count, caption)
+        .properties(height=180)
+        .configure_view(stroke=None)
+    )
+
+
+def monthly_distance_chart(distance_runs, months):
+    monthly = (
+        distance_runs.assign(
+            Month=distance_runs['Activity Date'].dt.to_period('M').dt.to_timestamp(),
+        )
+        .groupby('Month')['Distance km']
+        .sum()
+        .reindex(months, fill_value=0)
+        .rename_axis('Month')
+        .reset_index()
+    )
+
+    return alt.Chart(monthly).mark_bar(
+        color=config.CHART_SECONDARY,
+        cornerRadiusTopLeft=3,
+        cornerRadiusTopRight=3,
+    ).encode(
+        x=alt.X(
+            'yearmonth(Month):T',
+            title=None,
+            axis=alt.Axis(
+                format='%b %y',
+                tickCount=6,
+                labelOverlap='greedy',
+                grid=False,
+            ),
+        ),
+        y=alt.Y('Distance km:Q', title='km', axis=alt.Axis(tickCount=4)),
+        tooltip=[
+            alt.Tooltip('Month:T', format='%b %Y'),
+            alt.Tooltip('Distance km:Q', title='Distance (km)', format=',.1f'),
+        ],
+    ).properties(height=180).configure_view(stroke=None)
+
+
+def hours_and_minutes(seconds):
+    minutes = int(seconds // 60)
+    hours, minutes = divmod(minutes, 60)
+    return f'{hours:,}h {minutes}m'
+
 
 st.set_page_config(layout='wide', page_title='Strava Analytics')
+st.html('''
+<style>
+[data-testid="stMainBlockContainer"] {
+    padding-top: 3.5rem;
+    padding-bottom: 1.5rem;
+}
+</style>
+''')
 
-# Load data into session state so other pages can see it
 if 'summary_df' not in st.session_state:
     st.session_state['summary_df'] = parse_csv()
-summary_df = st.session_state['summary_df']
 
-st.title('Strava Archive Analytics Dashboard')
-st.subheader('Lifetime Training Overview')
+data = st.session_state['summary_df'].copy()
+data['Activity Date'] = pd.to_datetime(
+    data['Activity Date'], format='mixed', errors='coerce', utc=True,
+).dt.tz_localize(None)
 
-# Activity filter
-st.sidebar.header('Activity Filter')
-activity_types = ['All'] + list(summary_df['Activity Type'].unique())
-selected_type = st.sidebar.selectbox('Select Activity Type', activity_types)
+archive_start = data['Activity Date'].min()
+archive_end = data['Activity Date'].max()
 
-if selected_type != 'All':
-    filtered_df = summary_df[summary_df['Activity Type'] == selected_type]
+st.title('Strava Archive Analytics')
+if pd.notna(archive_start):
+    first_month = archive_start.strftime('%b %Y')
+    last_month = archive_end.strftime('%b %Y')
+    span = first_month if first_month == last_month else f'{first_month} – {last_month}'
+    st.caption(f'Strava export, {span}')
 else:
-    filtered_df = summary_df
-    
-# KPIs
-total_activities = len(filtered_df)
+    st.caption('Strava export')
 
-dist_df = filtered_df[~filtered_df['Activity Type'].isin(['Workout', 'Weight Training'])]
-total_distance_km = dist_df['Distance'].sum() / 1000
+activity_types = ['All', *sorted(data['Activity Type'].dropna().unique())]
+selected_type = st.sidebar.selectbox('Activity type', activity_types)
+filtered = data if selected_type == 'All' else data[data['Activity Type'] == selected_type]
 
-total_seconds = filtered_df['Moving Time'].sum()
-total_hours = total_seconds // 3600
-total_minutes = (total_seconds % 3600) // 60
+distances = filtered.loc[
+    ~filtered['Activity Type'].isin(['Workout', 'Weight Training']),
+    ['Activity Date', 'Distance'],
+].copy()
+distances['Distance km'] = pd.to_numeric(distances['Distance'], errors='coerce') / 1000
+total_km = distances['Distance km'].sum()
+longest_km = distances['Distance km'].max() if distances['Distance km'].notna().any() else 0
 
-total_calories = filtered_df['Calories'].sum()
+total_seconds = pd.to_numeric(filtered['Moving Time'], errors='coerce').sum()
+calories = pd.to_numeric(filtered['Calories'], errors='coerce').sum()
+elevation = (
+    pd.to_numeric(filtered['Elevation Gain'], errors='coerce').sum()
+    if 'Elevation Gain' in filtered else 0
+)
 
-total_elevation = filtered_df['Elevation Gain'].sum() if 'Elevation Gain' in filtered_df.columns else 0
-max_distance_km = dist_df['Distance'].max() / 1000 if not dist_df.empty else 0
+activities_per_week = 0
+seconds_per_week = 0
+dates = filtered['Activity Date'].dropna()
+if len(dates) > 1:
+    weeks = (dates.max() - dates.min()).days / 7
+    activities_per_week = len(filtered) / weeks if weeks > 0 else len(filtered)
+    seconds_per_week = total_seconds / weeks if weeks > 0 else total_seconds
 
-# Weekly consistency metrics
-if not filtered_df.empty and len(filtered_df) > 1:
-    min_date = filtered_df['Activity Date'].min()
-    max_date = filtered_df['Activity Date'].max()
-    weeks_active = (max_date - min_date).days / 7
-    
-    # Activities per week
-    weekly_avg = total_activities / weeks_active if weeks_active > 0 else total_activities
-    
-    # Moving time per week
-    avg_seconds_per_week = total_seconds / weeks_active if weeks_active > 0 else total_seconds
-    avg_weekly_hours = avg_seconds_per_week // 3600
-    avg_weekly_minutes = (avg_seconds_per_week % 3600) // 60
-else:
-    weekly_avg = 0
-    avg_weekly_hours = 0
-    avg_weekly_minutes = 0
+volume, consistency = st.columns(2, gap='small')
+with volume.container(border=True):
+    st.markdown('## Training volume')
+    first, second = st.columns(2)
+    first.metric('Activities', f'{len(filtered):,}')
+    second.metric('Distance', f'{total_km:,.1f} km')
+    first.metric('Moving time', hours_and_minutes(total_seconds))
+    second.metric('Calories burned', f'{calories:,.0f} kcal')
 
-st.subheader('Core Metrics')
+with consistency.container(border=True):
+    st.markdown('## Performance and consistency')
+    first, second = st.columns(2)
+    first.metric('Elevation gain', f'{elevation:,.0f} m')
+    second.metric('Longest distance', f'{longest_km:,.1f} km')
+    first.metric('Moving time / week', hours_and_minutes(seconds_per_week))
+    second.metric('Activities / week', f'{activities_per_week:.1f}')
 
-# 60/40 split for KPIs and chart
-top_left, top_right = st.columns([1.5, 1])
-
-with top_left:
-    row1_col1, row1_col2 = st.columns(2)
-    row1_col1.metric('🏃‍♂️ Total Activities', f'{total_activities}')
-    row1_col2.metric('📏 Total Distance', f'{total_distance_km:,.1f} km')
-    
-    row2_col1, row2_col2 = st.columns(2)
-    row2_col1.metric('⏱️ Moving Time', f'{total_hours:.0f}h {total_minutes:.0f}m')
-    row2_col2.metric('🔥 Calories Burned', f'{total_calories:,.0f} kcal')
-    
-with top_right:
-    if selected_type == 'All' and not filtered_df.empty:
-        donut_chart = plot_donut(filtered_df)
-        st.altair_chart(donut_chart, width='stretch')
+trend, mix = st.columns([1.35, 1], gap='medium')
+with trend:
+    st.markdown('## Monthly distance')
+    dated_distances = distances.dropna(subset=['Activity Date', 'Distance km'])
+    if dated_distances.empty:
+        st.caption('No dated distance records in this view.')
     else:
-        st.info(f'Viewing filtered data for: **{selected_type}**.\n\nSelect "All" in the sidebar to view activity composition chart.')
+        months = pd.period_range(archive_start, archive_end, freq='M').to_timestamp()
+        st.altair_chart(monthly_distance_chart(dated_distances, months), width='stretch')
 
-st.markdown('---')
+with mix:
+    st.markdown('## Activity mix')
+    if filtered.empty:
+        st.caption('No activities to show.')
+    elif selected_type == 'All':
+        st.altair_chart(activity_mix_chart(filtered['Activity Type']), width='stretch')
+    else:
+        st.caption('Select All to see the activity mix across the archive.')
 
-st.subheader('Performance Highs & Consistency')
-ext_col1, ext_col2, ext_col3, ext_col4 = st.columns(4)
-
-ext_col1.metric('⛰️ Total Elevation Gain', f'{total_elevation:,.0f} m')
-ext_col2.metric('🗺️ Longest Activity Distance', f'{max_distance_km:,.1f} km')
-
-ext_col3.metric('⏱️ Avg Moving Time / Week', f'{avg_weekly_hours:.0f}h {avg_weekly_minutes:.0f}m')    
-ext_col4.metric('📅 Activities / Week', f'{weekly_avg:.1f}')
+with st.expander('About this project'):
+    st.write(
+        'This dashboard uses a Strava activity export to explore training volume, '
+        'consistency, and aerobic efficiency over time. Home summarizes the archive. '
+        'The sidebar opens the detailed analysis pages.'
+    )
