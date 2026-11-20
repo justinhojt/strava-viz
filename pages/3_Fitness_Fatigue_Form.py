@@ -163,7 +163,7 @@ def plot_form(days, selected):
     x = date_axis()
     trace = alt.Chart(data).mark_line(
         color=UI_TEXT,
-        strokeWidth=2.6,
+        strokeWidth=2,
         point=len(values) == 1,
     ).encode(
         x=x,
