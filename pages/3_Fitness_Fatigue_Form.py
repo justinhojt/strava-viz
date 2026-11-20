@@ -145,7 +145,7 @@ def plot_form(days, selected):
     })
     bands = bands[bands['Lower'] < bands['Upper']]
 
-    shading = alt.Chart(bands).mark_rect(opacity=0.15).encode(
+    shading = alt.Chart(bands).mark_rect(opacity=0.25).encode(
         x=alt.value(0),
         x2=alt.value('width'),
         y=alt.Y('Lower:Q', title='Training stress balance', scale=scale),
@@ -256,96 +256,6 @@ with form_tab:
         st.altair_chart(plot_form(visible, selected_date), width='stretch')
     else:
         st.caption('No form values are available for this range.')
-
-st.header('Does form predict efficiency?')
-st.write(
-    f'This test compares a {config.BASELINE_WINDOW} rolling efficiency baseline with a model '
-    'that also uses form or fitness at the start of each run day.'
-)
-
-predictor_options = {'Form (TSB)': 'TSB', 'Fitness (CTL)': 'CTL_prev'}
-predictor_label = st.radio('Predictor', list(predictor_options), horizontal=True)
-predictor = predictor_options[predictor_label]
-
-# Compute lagged fitness from the full history before merging it with runs.
-form_df = trimps[['Date', 'TSB', 'CTL']].copy()
-form_df['CTL_prev'] = form_df['CTL'].shift(1)
-
-runs = get_steady_runs(summary_df).sort_values('Activity Date').copy()
-runs['baseline'] = (
-    runs.rolling(config.BASELINE_WINDOW, on='Activity Date', closed='left')['aero_ratio'].mean()
-)
-runs['Date'] = calendar_days(runs['Activity Date'])
-df = (
-    runs.merge(form_df[['Date', predictor]], on='Date', how='inner')
-    .dropna(subset=['baseline', predictor])
-    .sort_values('Activity Date')
-    .reset_index(drop=True)
-)
-df['residual'] = df['aero_ratio'] - df['baseline']
-
-minimum = max(config.MIN_RUNS, config.ML_CV_SPLITS + 1)
-if len(df) < minimum:
-    st.info(
-        f'Need {minimum} steady-state runs with form data for this test. '
-        f'{len(df)} currently qualify.'
-    )
-else:
-    X = df[[predictor]]
-    y = df['residual']
-
-    model_maes, base_maes = [], []
-    for train, test in TimeSeriesSplit(n_splits=config.ML_CV_SPLITS).split(df):
-        model = LinearRegression().fit(X.iloc[train], y.iloc[train])
-        prediction = model.predict(X.iloc[test])
-        model_maes.append(np.abs(prediction - y.iloc[test]).mean())
-        base_maes.append(np.abs(y.iloc[test]).mean())
-
-    cv_mae, cv_std = np.mean(model_maes), np.std(model_maes)
-    base_mae = np.mean(base_maes)
-    m1, m2, m3 = st.columns(3)
-
-    if X[predictor].nunique() > 1 and len(df) > 2:
-        ols = sm.OLS(y, sm.add_constant(X)).fit()
-        slope_10 = ols.params[predictor] * 10
-        ci_low, ci_high = ols.conf_int().loc[predictor] * 10
-        label = 'TSB' if predictor == 'TSB' else 'CTL'
-        m1.metric(
-            f'Effect per +10 {label}',
-            f'{slope_10:+.3f}',
-            delta=f'95% CI [{ci_low:.3f}, {ci_high:.3f}]',
-            delta_color='off',
-            delta_arrow='off',
-        )
-    else:
-        m1.metric('Estimated effect', '—')
-
-    m2.metric(
-        'CV MAE with predictor',
-        f'{cv_mae:.3f} ± {cv_std:.3f}',
-        delta=f'Rolling average only: {base_mae:.3f}',
-        delta_color='off',
-        delta_arrow='off',
-    )
-    m3.metric('Runs analysed', f'{len(df):,}')
-
-    if base_mae > 0 and cv_mae < base_mae:
-        improvement = (base_mae - cv_mae) / base_mae * 100
-        st.success(f'Adding {predictor_label} lowered held-out error by {improvement:.1f}%.')
-    else:
-        st.info('The rolling baseline had the same or lower held-out error.')
-
-    st.caption(
-        'The test uses the full archive and evaluates predictions on later runs. '
-        'The conventional OLS interval assumes independent errors across runs.'
-    )
-    st.scatter_chart(
-        df,
-        x=predictor,
-        y='residual',
-        x_label=predictor_label,
-        y_label='Efficiency vs. rolling average',
-    )
 
 with st.expander('Methodology'):
     st.markdown("""
