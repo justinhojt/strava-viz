@@ -97,7 +97,7 @@ def efficiency_chart(runs):
             ],
         )
     )
-    return style_chart((points + average).properties(height=295))
+    return style_chart((points + average).properties(height=360))
 
 
 def prediction_error_chart(mean_mae):
@@ -336,19 +336,7 @@ with kpi_slot:
 if runs.empty:
     st.info('No steady-state runs had enough data to plot aerobic efficiency.')
 else:
-    st.html('''
-        <style>
-        @media (min-width: 64rem) {
-            .st-key-efficiency_chart {
-                width: calc(100% + 8rem);
-                max-width: none;
-                margin-inline: -1rem;
-            }
-        }
-        </style>
-    ''')
-    with st.container(key='efficiency_chart'):
-        st.altair_chart(efficiency_chart(runs), width='stretch')
+    st.altair_chart(efficiency_chart(runs), width='stretch')
     st.caption(
         'Efficiency ratio is grade-adjusted speed divided by the fraction '
         'of heart-rate reserve used.'
