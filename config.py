@@ -29,10 +29,10 @@ ACTIVITY_COLORS = {
 
 # TSB training zones
 ZONE_COLORS = {
-    'Freshness': '#6cf7a1',          # TSB > 0 (Green)
-    'Maintenance': '#808080',        # TSB 0 to -10 (Grey)
-    'Optimal_Training': '#ff9955',   # TSB -10 to -30 (Orange)
-    'Overtraining': '#f44e65'        # TSB < -30 (Red)
+    'Fresh / Recovery': '#38784F',
+    'Maintenance Zone': '#606D77',
+    'Optimal Training': '#C88618',
+    'Overtraining Risk': '#B94156',
 }
 
 # TSB zone breakpoints 
