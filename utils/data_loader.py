@@ -1,97 +1,127 @@
-from fitparse import FitFile
-import streamlit as st
-import pandas as pd
-import config
-import gpxpy
 import gzip
 import os
-import io
 
-csv = config.ACTIVITIES_CSV
+import gpxpy
+import pandas as pd
+import streamlit as st
+from fitparse import FitFile
 
-# Converts granular timestamps to local timezone
+import config
+
+
+def parse_dates(values, *, utc=True, preserve_wall_time=False):
+    """Parse UTC by default, with options to retain offsets or clock times."""
+    if utc and not preserve_wall_time:
+        return pd.to_datetime(values, format='mixed', errors='coerce', utc=True)
+
+    # Parsing individually accepts columns that mix offsets and naive dates.
+    parsed = values.map(lambda value: pd.to_datetime(value, errors='coerce'))
+
+    if preserve_wall_time:
+        return parsed.map(
+            lambda timestamp: pd.NaT if pd.isna(timestamp) else timestamp.tz_localize(None)
+        ).astype('datetime64[ns]')
+
+    return parsed.astype('datetime64[ns]') if parsed.isna().all() else parsed
+
+
+@st.cache_data
+def parse_csv():
+    path = config.ACTIVITIES_CSV
+    if not os.path.exists(path):
+        raise FileNotFoundError(f'Could not find activities dataset at {path}')
+
+    df = pd.read_csv(path)
+    df['Activity Date'] = parse_dates(df['Activity Date'], utc=False)
+    return df
+
+
+def get_summary():
+    """Load the activity summary once per Streamlit session."""
+    if 'summary_df' not in st.session_state:
+        st.session_state['summary_df'] = parse_csv()
+    return st.session_state['summary_df']
+
+
 def process_timestamps(df, local_tz=config.TIMEZONE_TARGET):
+    """Convert GPS timestamps to local clock time for the Activity Viewer."""
     if not df.empty:
-        df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True)
-        df['timestamp'] = df['timestamp'].dt.tz_convert(local_tz).dt.tz_localize(None)
+        timestamps = parse_dates(df['timestamp'])
+        df['timestamp'] = timestamps.dt.tz_convert(local_tz).dt.tz_localize(None)
         df['graph_timestamp'] = df['timestamp'].dt.strftime('%Y-%m-%dT%H:%M:%S')
     return df
 
-# Parse CSV and convert dates to datetime object
-@st.cache_data
-def parse_csv():
-    if not os.path.exists(csv):
-        raise FileNotFoundError(f'Could not find activities dataset at {csv}')
-        
-    df = pd.read_csv(csv)
-    df['Activity Date'] = pd.to_datetime(df['Activity Date'], format='mixed')
-    return df
 
-# Parse gpx/gpx.gz files and convert granular timestamps to local timezone
+def _open_activity(filename, mode, **kwargs):
+    path = os.path.join(config.DATA_DIR, filename)
+    if not os.path.exists(path):
+        raise FileNotFoundError(f'File not found: {path}')
+
+    opener = gzip.open if path.lower().endswith('.gz') else open
+    return opener(path, mode, **kwargs)
+
+
+def _gpx_heart_rate(extensions):
+    for extension in extensions:
+        for element in extension.iter():
+            name = element.tag.rsplit('}', 1)[-1].lower()
+            if name in ('hr', 'heartrate'):
+                try:
+                    return int(element.text)
+                except (TypeError, ValueError):
+                    continue
+    return None
+
+
 @st.cache_data
 def parse_gpx(gpx_filename, local_tz=config.TIMEZONE_TARGET):
-    gpx_file = os.path.join('data', gpx_filename)
-    
-    if not os.path.exists(gpx_file):
-        raise FileNotFoundError(f"File not found: {gpx_file}")
-        
-    open_func = gzip.open if gpx_file.endswith('.gz') else open
-    mode = 'rt' if gpx_file.endswith('.gz') else 'r'
-    
-    with open_func(gpx_file, mode, encoding='utf-8') as f:
-        gpx = gpxpy.parse(f)
-            
+    with _open_activity(gpx_filename, 'rt', encoding='utf-8') as file:
+        gpx = gpxpy.parse(file)
+
     track_data = []
     for track in gpx.tracks:
         for segment in track.segments:
             for point in segment.points:
-                hr = None
-                if point.extensions:
-                    for ext in point.extensions:
-                        if 'hr' in ext.tag:
-                            hr = int(ext.text)
-                            
                 track_data.append({
                     'timestamp': point.time,
-                    'latitude': point.latitude,   
+                    'latitude': point.latitude,
                     'longitude': point.longitude,
                     'elevation': point.elevation,
-                    'heart_rate': hr
+                    'heart_rate': _gpx_heart_rate(point.extensions),
                 })
-                
+
     return process_timestamps(pd.DataFrame(track_data), local_tz)
 
-# Parse fit/fit.gz files and convert granular timestamps to local timezone
+
 @st.cache_data
 def parse_fit(fit_filename, local_tz=config.TIMEZONE_TARGET):
-    fit_file = os.path.join('data', fit_filename)
-    
-    if not os.path.exists(fit_file):
-        raise FileNotFoundError(f"File not found: {fit_file}")
-        
-    open_func = gzip.open if fit_file.endswith('.gz') else open
-    with open_func(fit_file, 'rb') as f:
-        fitfile = FitFile(io.BytesIO(f.read()) if fit_file.endswith('.gz') else f)
-            
     track_data = []
-    for record in fitfile.get_messages('record'):
-        values = record.get_values()
-        
-        ele = values.get('enhanced_altitude', values.get('altitude'))
-        
-        lat = values.get('position_lat')
-        lon = values.get('position_long')
-        if lat is not None and lon is not None:
-            lat = lat * (180.0 / 2**31)
-            lon = lon * (180.0 / 2**31)
-            
-        if 'timestamp' in values:
+
+    with _open_activity(fit_filename, 'rb') as file:
+        # FitFile reads record messages lazily.
+        fitfile = FitFile(file)
+        for record in fitfile.get_messages('record'):
+            values = record.get_values()
+            if 'timestamp' not in values:
+                continue
+
+            elevation = values.get('enhanced_altitude')
+            if elevation is None:
+                elevation = values.get('altitude')
+
+            latitude = values.get('position_lat')
+            longitude = values.get('position_long')
+            if latitude is not None and longitude is not None:
+                degrees_per_semicircle = 180 / 2**31
+                latitude *= degrees_per_semicircle
+                longitude *= degrees_per_semicircle
+
             track_data.append({
-                'timestamp': values.get('timestamp'),
-                'latitude': lat,
-                'longitude': lon,
-                'elevation': ele,
-                'heart_rate': values.get('heart_rate')
+                'timestamp': values['timestamp'],
+                'latitude': latitude,
+                'longitude': longitude,
+                'elevation': elevation,
+                'heart_rate': values.get('heart_rate'),
             })
-                
+
     return process_timestamps(pd.DataFrame(track_data), local_tz)
