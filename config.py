@@ -1,94 +1,85 @@
 import os
 
+
 DATA_DIR = 'data'
 ACTIVITIES_CSV = os.path.join(DATA_DIR, 'activities_refined.csv')
 
-# UI colour hex codes
-COLOR_STRAVA_ORANGE = '#fc5200'
-COLOR_MUTED_GREY = '#808080'
-COLOR_PURE_WHITE = '#ffffff'
+# Brand
+ACCENT = '#FC4C02'
+CHART_SECONDARY = '#4D769B'
+CHART_FONT = 'Inter, sans-serif'
 
-# Performance Metrics Lines
-COLOR_FITNESS = '#1f77b4'        # Muted blue
-COLOR_FATIGUE = '#ff7f0e'        # Muted orange
-
-# Heart Rate Zone Breakdown
-HR_ZONE_COLORS = ['#95a5a6', '#3498db', '#2ecc71', '#f1c40f', '#e74c3c']
-HR_ZONE_LABELS = ['Z1 Recovery', 'Z2 Aerobic', 'Z3 Tempo', 'Z4 Threshold', 'Z5 Anaerobic']
-HR_ZONE_PCT_BOUNDARIES = [0, 0.60, 0.70, 0.80, 0.90, 1.50]  # % of HR max; last bound is an open-ended cap
-
-# Activity composition breakdown (donut chart)
-ACTIVITY_COLORS = {
-    'Run': '#fc5200',              
-    'Walk': '#ee9f28',             
-    'Swim': '#f9dcb0',             
-    'Workout': '#e17602',
-    'Weight Training': '#c96f2e',
-    'Default': '#808080'         
+# Chart neutrals and table colors. Text defaults match Streamlit's built-in themes.
+CHART_NEUTRALS = {
+    'light': {
+        'text': '#31333F',
+        'muted': '#596F80',
+        'grid': '#D3DAE2',
+        'table_header': '#EAEFF4',
+        'table_border': '#D7DEE6',
+        'table_highlight': '#FCE4D4',
+        'table_highlight_text': '#85340F',
+    },
+    'dark': {
+        'text': '#FAFAFA',
+        'muted': '#9BAFC0',
+        'grid': '#394451',
+        'table_header': '#26303D',
+        'table_border': '#3F4B59',
+        'table_highlight': '#633923',
+        'table_highlight_text': '#FFE0C8',
+    },
 }
 
-# TSB training zones
-ZONE_COLORS = {
+# Semantic palettes
+ACTIVITY_MIX_COLORS = {
+    'Run': ACCENT,
+    'Workout': '#96340F',
+    'Walk': '#D98B2B',
+    'Swim': '#F5BB86',
+}
+ACTIVITY_MIX_EXTRA_COLORS = ('#BC5C28', '#74351D', '#F08A53', '#E7A15D')
+
+HR_ZONE_COLORS = ['#687486', CHART_SECONDARY, '#527B68', '#C88618', '#B94156']
+HR_ZONE_LABELS = ['Z1 Recovery', 'Z2 Aerobic', 'Z3 Tempo', 'Z4 Threshold', 'Z5 Anaerobic']
+HR_ZONE_PCT_BOUNDARIES = [0, 0.60, 0.70, 0.80, 0.90, 1.50]  # Fractions of HR max
+
+TSB_ZONE_COLORS = {
     'Fresh / Recovery': '#38784F',
     'Maintenance Zone': '#606D77',
     'Optimal Training': '#C88618',
     'Overtraining Risk': '#B94156',
 }
-
-# TSB zone breakpoints 
 TSB_MAINTENANCE_UPPER = 0
 TSB_OPTIMAL_UPPER = -10
 TSB_OVERTRAINING_UPPER = -30
 
-# Default cardiovascular metrics
+LOAD_LINE_COLORS = (CHART_SECONDARY, ACCENT)  # CTL, ATL
+
+# Categorical series
+CHART_CATEGORICAL_COLORS = (
+    ACCENT, CHART_SECONDARY, '#527B68', '#8B709C',
+    '#9C784C', '#687486', '#52818D', '#A66E82',
+)
+
+# Cardiovascular defaults and training-load windows
 DEFAULT_HR_MAX = 200
 DEFAULT_HR_REST = 75
 DEFAULT_GENDER = 'male'
+CTL_DAY_SPAN = 42
+ATL_DAY_SPAN = 7
+MIN_RUNS = 30
+BASELINE_WINDOW = '42D'
 
-# Banister Impulse-Response Model Constants (Rolling window spans in days)
-CTL_DAY_SPAN = 42   # Chronic Training Load (Fitness)
-ATL_DAY_SPAN = 7    # Acute Training Load (Fatigue)
-
-MIN_RUNS = 30                # Minimum runs needed for a meaningful CV
-BASELINE_WINDOW = '42D'      # Rolling average window for the baseline
-
-# Aerobic Efficiency / Heat Stress ML Model
-ML_MIN_SAMPLES = 50           # Minimum steady-state runs with weather data required to train the model
-ML_BASELINE_TEMP_C = 28.0     # Standard heat-index normalization baseline (Singapore climate)
+# Aerobic efficiency and weather adjustment
+ML_MIN_SAMPLES = 50
+ML_BASELINE_TEMP_C = 28.0
 ML_BASELINE_HUMIDITY = 80.0
 ML_CV_SPLITS = 4
 
 TIMEZONE_TARGET = 'Asia/Singapore'
 TIMEZONE_OFFSET_HOURS = 8
 
-# K-means run clustering
-KMEANS_MAX_K = 6        # silhouette loop tries k = 2..KMEANS_MAX_K
-KMEANS_MIN_RUNS = 20    # minimum runs before clustering is worthwhile
-
-#temp
-STRAVA_ACCENT = '#FC4C02'
-CHART_SECONDARY = '#4D769B'
-
-UI_BACKGROUND = '#FAFAF8'
-UI_TEXT = '#1E2938'
-UI_MUTED_TEXT = '#596779'
-
-CHART_CATEGORICAL_COLORS = (
-    STRAVA_ACCENT,
-    CHART_SECONDARY,
-    '#527B68',
-    '#8B709C',
-    '#9C784C',
-    '#687486',
-    '#52818D',
-    '#A66E82',
-)
-
-ACTIVITY_MIX_COLORS = {
-    'Run': STRAVA_ACCENT,
-    'Workout': '#96340F',
-    'Walk': '#D98B2B',
-    'Swim': '#F5BB86',
-}
-
-ACTIVITY_MIX_EXTRA_COLORS = ('#BC5C28', '#74351D', '#F08A53', '#E7A15D')
+# Run clustering
+KMEANS_MAX_K = 6
+KMEANS_MIN_RUNS = 20
