@@ -15,8 +15,8 @@ if 'summary_df' in st.session_state:
 else:
     summary_df = parse_csv()
 
-st.subheader('🧩 Run Types (K-means Clustering)')
-st.write('Groups your steady-state runs by distance, pace and effort, then checks whether each group is getting more efficient.')
+st.title('Run Clusters')
+st.caption('Runs grouped by similar characteristics.')
 
 # Same filters as the Aerobic Efficiency page
 runs = get_steady_runs(summary_df)
