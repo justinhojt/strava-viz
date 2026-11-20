@@ -86,6 +86,9 @@ CHART_CATEGORICAL_COLORS = (
 
 ACTIVITY_MIX_COLORS = {
     'Run': STRAVA_ACCENT,
-    'Workout': CHART_SECONDARY,
-    'Walk': CHART_CATEGORICAL_COLORS[2],
+    'Workout': '#96340F',
+    'Walk': '#D98B2B',
+    'Swim': '#F5BB86',
 }
+
+ACTIVITY_MIX_EXTRA_COLORS = ('#BC5C28', '#74351D', '#F08A53', '#E7A15D')
