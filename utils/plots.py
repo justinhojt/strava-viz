@@ -1,198 +1,592 @@
+import math
+from itertools import cycle
+from math import inf
+
 import altair as alt
 import pandas as pd
+import streamlit as st
+
 import config
 
-# Helper function to filter dataframe to the last recorded activity date
+
+SERIES_HEIGHT = 224
+CLUSTER = 'Cluster Name'
+
+
+def get_theme():
+    base = st.get_option('theme.base') or 'light'
+    mode = st.context.theme.type or base
+    colors = config.CHART_NEUTRALS[mode]
+    text = st.get_option(f'theme.{mode}.textColor')
+    if text is None and mode == base:
+        text = st.get_option('theme.textColor')
+    return {**colors, 'text': text or colors['text']}
+
+
+def style_chart(chart, theme=None):
+    theme = get_theme() if theme is None else theme
+    font = config.CHART_FONT
+    return (
+        chart.configure(font=font)
+        .configure_axis(
+            labelFont=font, titleFont=font, labelColor=theme['text'],
+            titleColor=theme['text'], labelFontSize=12, titleFontSize=12,
+            gridColor=theme['grid'], tickColor=theme['grid'], domain=False,
+        )
+        .configure_legend(
+            labelFont=font, labelColor=theme['text'], labelFontSize=12,
+            orient='bottom', direction='horizontal',
+        )
+        .configure_view(stroke=None)
+    )
+
+
 def filter_to_last_activity(df):
     if 'trimps' in df.columns:
-        last_active_date = df[df['trimps'] > 0]['Date'].max()
+        last_active_date = df.loc[df['trimps'] > 0, 'Date'].max()
         if pd.notna(last_active_date):
-            return df[df['Date'] <= last_active_date]
+            return df.loc[df['Date'] <= last_active_date]
     return df
 
-# Plots aerobic efficiency chart with 42-day moving average
-def plot_aero(df):
-    df = df.sort_values('Activity Date')
-    df['moving_avg'] = df.rolling('42D', on='Activity Date')['aero_ratio'].mean()
-    
-    df['graph_date'] = df['Activity Date'].dt.strftime('%Y-%m-%dT%H:%M:%S')
 
-    base = alt.Chart(df).encode(
-        x=alt.X('graph_date:T', title='Date')
+def plot_donut(df, *, theme=None):
+    theme = get_theme() if theme is None else theme
+    counts = (
+        df['Activity Type'].astype('string').fillna('Unspecified').value_counts()
+        .rename_axis('Activity')
+        .reset_index(name='Count')
     )
+    total = counts['Count'].sum()
+    counts['Share'] = counts['Count'] / total
+    counts['Order'] = range(len(counts))
+    counts['Slice label'] = counts['Share'].map(
+        lambda share: f'{share:.0%}' if share >= 0.07 else ''
+    )
+    counts['Legend'] = [
+        f'{activity} · {share:.1%}'
+        for activity, share in zip(counts['Activity'], counts['Share'])
+    ]
 
-    points = base.mark_circle(
-        size=60, 
-        fill=config.COLOR_PURE_WHITE, 
-        stroke=config.COLOR_STRAVA_ORANGE, 
-        strokeWidth=1.5, 
-        opacity=0.7
+    colors = config.ACTIVITY_MIX_COLORS.copy()
+    extra_colors = cycle(config.ACTIVITY_MIX_EXTRA_COLORS)
+    for activity in sorted(set(counts['Activity']) - colors.keys()):
+        colors[activity] = next(extra_colors)
+
+    base = alt.Chart(counts).encode(
+        theta=alt.Theta('Count:Q').stack(True),
+        order=alt.Order('Order:Q', sort='ascending'),
+        detail='Activity:N',
+    )
+    arcs = base.mark_arc(
+        innerRadius=46, outerRadius=68, padAngle=0.025, strokeWidth=0,
     ).encode(
-        y=alt.Y('aero_ratio:Q', title='Ratio (Grade-adjusted Pace/Heart Rate Reserve)', scale=alt.Scale(zero=False)),
-        tooltip=[alt.Tooltip('graph_date:T', title='Date', format='%Y-%m-%d'), 'aero_ratio:Q']
-    )
-
-    trend_line = base.mark_line(color=config.COLOR_STRAVA_ORANGE, size=3).encode(
-        y=alt.Y('moving_avg:Q')
-    )
-
-    return alt.layer(points, trend_line).properties(height=400)
-    
-# Plots fitness (chronic training load) and fatigue (acute training load)
-def plot_fitness_fatigue(df, selected_date=None):
-    df = filter_to_last_activity(df)
-
-    base = df.melt(id_vars=['Date'], value_vars=['CTL', 'ATL'], 
-                   var_name='Metric', value_name='Value')
-
-    base['Metric_Label'] = base['Metric'].map({'CTL': 'Fitness (CTL)', 'ATL': 'Fatigue (ATL)'})
-
-    chart = alt.Chart(base).mark_line(strokeWidth=2).encode(
-        x=alt.X('Date:T', title='Date', axis=alt.Axis(format="%b '%y")),
-        y=alt.Y('Value:Q', title='Stress Units', scale=alt.Scale(zero=False)),
-        color=alt.Color('Metric_Label:N', 
-                        scale=alt.Scale(domain=['Fitness (CTL)', 'Fatigue (ATL)'], 
-                                        range=[config.COLOR_FITNESS, config.COLOR_FATIGUE]),
-                        title='Metric'),
-        tooltip=[
-            alt.Tooltip('Date:T', title='Date', format='%Y-%m-%d'),
-            alt.Tooltip('Metric_Label:N', title='Metric'),
-            alt.Tooltip('Value:Q', title='Stress Units', format='.2f')
-        ]
-    )
-
-    # Add vertical sync line if a date is provided
-    if selected_date:
-        vline = alt.Chart(pd.DataFrame({'Date': [pd.Timestamp(selected_date)]})).mark_rule(
-            color=config.COLOR_PURE_WHITE, strokeWidth=1
-        ).encode(x='Date:T')
-        return alt.layer(chart, vline).properties(height=350)
-
-    return chart.properties(height=350)
-
-# Plots training stress balance with training zones
-def plot_tsb_zones(df, selected_date=None):
-    df = filter_to_last_activity(df)
-
-    max_tsb = float(max(df['TSB'].max(), 15) + 10)
-    min_tsb = float(min(df['TSB'].min(), -35) - 10)
-
-    zone_data = pd.DataFrame([
-        {'y1': config.TSB_MAINTENANCE_UPPER, 'y2': max_tsb, 'color': config.ZONE_COLORS['Freshness']},        
-        {'y1': config.TSB_OPTIMAL_UPPER, 'y2': config.TSB_MAINTENANCE_UPPER, 'color': config.ZONE_COLORS['Maintenance']},        
-        {'y1': config.TSB_OVERTRAINING_UPPER, 'y2': config.TSB_OPTIMAL_UPPER, 'color': config.ZONE_COLORS['Optimal_Training']},   
-        {'y1': min_tsb, 'y2': config.TSB_OVERTRAINING_UPPER, 'color': config.ZONE_COLORS['Overtraining']}     
-    ])
-
-    zones = alt.Chart(zone_data).mark_rect(opacity=0.25).encode(
-        y=alt.Y('y1:Q', title='Form (TSB)'),
-        y2='y2:Q',
-        color=alt.Color('color:N', scale=None),
-        tooltip=alt.value(None)
-    )
-
-    tsb_line = alt.Chart(df).mark_line(color=config.COLOR_PURE_WHITE, strokeWidth=2).encode(
-        x=alt.X('Date:T', title='Date', axis=alt.Axis(format="%b '%y")),
-        y=alt.Y('TSB:Q', title='Form (TSB)')
-    )
-
-    baseline = alt.Chart(pd.DataFrame([{'y': 0}])).mark_rule(
-        color=config.COLOR_MUTED_GREY, strokeDash=[4, 4]
-    ).encode(y='y:Q')
-
-    layers = [zones, tsb_line, baseline]
-
-    # Add vertical sync line if a date is provided
-    if selected_date:
-        vline = alt.Chart(pd.DataFrame({'Date': [pd.Timestamp(selected_date)]})).mark_rule(
-            color=config.COLOR_PURE_WHITE, strokeWidth=1 
-        ).encode(x='Date:T')
-        layers.append(vline)
-
-    return alt.layer(*layers).properties(height=350)
-
-# Plots activity breakdown donut chart
-def plot_donut(df):
-    breakdown = df['Activity Type'].value_counts().reset_index()
-    breakdown.columns = ['Activity', 'Count']
-    
-    # Align colours with the activities present in the current dataframe
-    present_activities = breakdown['Activity'].tolist()
-    chart_range = [config.ACTIVITY_COLORS.get(act, config.ACTIVITY_COLORS['Default']) for act in present_activities]
-    
-    donut_chart = alt.Chart(breakdown).mark_arc(innerRadius=60).encode(
-        theta=alt.Theta(field='Count', type='quantitative'),
         color=alt.Color(
-            field='Activity', 
-            type='nominal', 
-            scale=alt.Scale(domain=present_activities, range=chart_range),
-            legend=alt.Legend(title='Activity Breakdown', orient='right')
+            'Legend:N',
+            scale=alt.Scale(
+                domain=counts['Legend'].tolist(),
+                range=counts['Activity'].map(colors).tolist(),
+            ),
+            legend=alt.Legend(
+                title=None, orient='right', direction='vertical', labelLimit=190,
+            ),
         ),
-        tooltip=['Activity', 'Count']
-    ).properties(height=220)
-    
-    return donut_chart
-
-# Plots a horizontal bar chart of time spent in each heart rate zone
-def plot_hr_zones(zone_counts, labels):
-    zone_colors = alt.Scale(
-        domain=labels,
-        range=config.HR_ZONE_COLORS 
-    )
-    
-    zone_chart = alt.Chart(zone_counts).mark_bar(cornerRadiusEnd=2, height=18).encode(
-        y=alt.Y('Zone:N', sort=labels, title=None, axis=alt.Axis(labelAngle=0, grid=False)),
-        x=alt.X('Minutes:Q', title='Time (Minutes)'),
-        color=alt.Color('Zone:N', scale=zone_colors, legend=None),
         tooltip=[
-            alt.Tooltip('Zone:N', title='Zone'),
-            alt.Tooltip('Minutes:Q', title='Minutes', format='.1f')
-        ]
-    ).properties(height=200)
-    return zone_chart
+            alt.Tooltip('Activity:N'),
+            alt.Tooltip('Count:Q', title='Activities', format=',d'),
+            alt.Tooltip('Share:Q', format='.1%'),
+        ],
+    )
+    labels = base.mark_text(
+        radius=83, size=11, color=theme['text'],
+    ).encode(text='Slice label:N')
 
-# Plots a line chart of heart rate over time
-def plot_hr_series(df):
-    return alt.Chart(df).mark_line(color=config.COLOR_STRAVA_ORANGE).encode(
-        x=alt.X('graph_timestamp:T', title='Time'),
-        y=alt.Y('heart_rate:Q', title='Heart Rate (bpm)', scale=alt.Scale(zero=False))
+    center = alt.Chart(pd.DataFrame({'Total': [f'{total:,}']}))
+    count = center.mark_text(
+        dy=-8, size=25, fontWeight=600, color=theme['text'],
+    ).encode(text='Total:N')
+    caption = center.mark_text(
+        dy=13, size=11, color=theme['muted'],
+    ).encode(text=alt.value('activities'))
+
+    return style_chart(
+        alt.layer(arcs, labels, count, caption).properties(height=180), theme,
     )
 
-# Plots a line chart of elevation over time
-def plot_ele_series(df):
-    return alt.Chart(df).mark_line(color=config.COLOR_STRAVA_ORANGE).encode(
-        x=alt.X('graph_timestamp:T', title='Time'),
-        y=alt.Y('elevation:Q', title='Elevation (m)', scale=alt.Scale(zero=False))
+
+def plot_monthly_distance(distance_runs, months, *, theme=None):
+    monthly = (
+        distance_runs.assign(
+            Month=distance_runs['Activity Date'].dt.to_period('M').dt.to_timestamp(),
+        )
+        .groupby('Month')['Distance km']
+        .sum()
+        .reindex(months, fill_value=0)
+        .rename_axis('Month')
+        .reset_index()
     )
 
-# Plots silhouette score for each candidate k
-def plot_silhouette(scores_df):
-    return alt.Chart(scores_df).mark_line(
-        color=config.COLOR_STRAVA_ORANGE, point=True, strokeWidth=2
+    chart = alt.Chart(monthly).mark_bar(
+        color=config.ACCENT,
+        cornerRadiusTopLeft=3,
+        cornerRadiusTopRight=3,
     ).encode(
-        x=alt.X('k:O', title='Number of clusters (k)', axis=alt.Axis(labelAngle=0)),
+        x=alt.X(
+            'yearmonth(Month):T',
+            title=None,
+            axis=alt.Axis(format='%b %y', tickCount=6, labelOverlap='greedy', grid=False),
+        ),
+        y=alt.Y('Distance km:Q', title='km', axis=alt.Axis(tickCount=4)),
+        tooltip=[
+            alt.Tooltip('Month:T', format='%b %Y'),
+            alt.Tooltip('Distance km:Q', title='Distance (km)', format=',.1f'),
+        ],
+    ).properties(height=180)
+    return style_chart(chart, theme)
+
+
+def format_clock(seconds):
+    minutes, seconds = divmod(int(seconds), 60)
+    return f'{minutes}:{seconds:02d}'
+
+
+def _elapsed_axis(duration):
+    if duration < 60:
+        step = max(1, math.ceil(duration / 5))
+    elif duration < 300:
+        step = 60
+    elif duration <= 2700:
+        step = 300
+    else:
+        step = 600 * math.ceil(duration / 7200)
+
+    return alt.Axis(
+        values=list(range(0, int(duration) + 1, step)),
+        labelExpr="floor(datum.value / 60) + ':' + format(datum.value % 60, '02d')",
+        labelPadding=8,
+        grid=False,
+    )
+
+
+def _hr_zone_color(labels):
+    return alt.Color(
+        'Zone:N',
+        scale=alt.Scale(domain=list(labels), range=list(config.HR_ZONE_COLORS)),
+        legend=None,
+    )
+
+
+def _elapsed_activity(data):
+    if {'Elapsed seconds', 'Elapsed'}.issubset(data.columns):
+        return data
+
+    field = 'timestamp' if 'timestamp' in data else 'graph_timestamp'
+    timestamps = pd.to_datetime(data[field], format='mixed', errors='coerce', utc=True)
+    activity = (
+        data.assign(timestamp=timestamps)
+        .dropna(subset=['timestamp'])
+        .sort_values('timestamp', kind='stable')
+    )
+    seconds = (activity['timestamp'] - activity['timestamp'].min()).dt.total_seconds()
+    return activity.assign(**{
+        'Elapsed seconds': seconds,
+        'Elapsed': seconds.map(format_clock),
+    })
+
+
+def _plot_activity_series(data, metric, unit, *, bands=None, theme=None):
+    theme = get_theme() if theme is None else theme
+    data = _elapsed_activity(data)
+    duration = max(1, float(data['Elapsed seconds'].max()))
+    x = alt.X(
+        'Elapsed seconds:Q',
+        title='Elapsed time (m:ss)',
+        scale=alt.Scale(domain=[0, duration], nice=False),
+        axis=_elapsed_axis(duration),
+    )
+
+    y_scale = alt.Scale(zero=False)
+    if bands is not None:
+        low = max(0, math.floor((data[metric].min() - 4) / 5) * 5)
+        high = math.ceil((data[metric].max() + 4) / 5) * 5
+        y_scale = alt.Scale(domain=[low, high], nice=False)
+        visible = bands.assign(
+            Lower=bands['Lower'].clip(lower=low),
+            Upper=bands['Upper'].clip(upper=high),
+        )
+        visible = visible.loc[visible['Lower'] < visible['Upper']]
+
+    line = alt.Chart(data[['Elapsed seconds', 'Elapsed', metric]]).mark_line(
+        color=theme['text'], strokeWidth=2.1, clip=True,
+    ).encode(
+        x=x,
+        y=alt.Y(
+            f'{metric}:Q', title=unit, scale=y_scale,
+            axis=alt.Axis(tickCount=5, grid=True),
+        ),
+        tooltip=[
+            alt.Tooltip('Elapsed:N'),
+            alt.Tooltip(f'{metric}:Q', title=unit, format='.0f'),
+        ],
+    )
+
+    if bands is None:
+        return style_chart(line.properties(height=SERIES_HEIGHT), theme)
+
+    shading = alt.Chart(visible).mark_rect(opacity=0.15).encode(
+        x=alt.value(0),
+        x2=alt.value('width'),
+        y=alt.Y('Lower:Q', scale=y_scale, title=unit),
+        y2='Upper:Q',
+        color=_hr_zone_color(config.HR_ZONE_LABELS),
+    )
+    return style_chart((shading + line).properties(height=SERIES_HEIGHT), theme)
+
+
+def plot_hr_series(df, *, bands=None, theme=None):
+    return _plot_activity_series(
+        df, 'heart_rate', 'Heart rate (bpm)', bands=bands, theme=theme,
+    )
+
+
+def plot_ele_series(df, *, theme=None):
+    return _plot_activity_series(df, 'elevation', 'Elevation (m)', theme=theme)
+
+
+def plot_hr_zones(zone_counts, labels, *, theme=None):
+    theme = get_theme() if theme is None else theme
+    zones = zone_counts.assign(
+        Label=zone_counts['Minutes'].map(lambda minutes: f'{minutes:.1f} min'),
+    )
+    base = alt.Chart(zones).encode(
+        y=alt.Y(
+            'Zone:N', sort=labels,
+            axis=alt.Axis(title=None, ticks=False, domain=False, labelPadding=8),
+        ),
+        x=alt.X(
+            'Minutes:Q', axis=None,
+            scale=alt.Scale(domain=[0, max(1, zones['Minutes'].max() * 1.28)], nice=False),
+        ),
+    )
+    bars = base.mark_bar(size=22, cornerRadiusEnd=4).encode(
+        color=_hr_zone_color(labels),
+        tooltip=[alt.Tooltip('Zone:N'), alt.Tooltip('Minutes:Q', format='.2f')],
+    )
+    values = base.mark_text(
+        align='left', baseline='middle', dx=6, size=12, color=theme['text'],
+    ).encode(text='Label:N')
+
+    return style_chart(
+        (bars + values).properties(height=max(150, 29 * len(labels))), theme,
+    )
+
+
+def plot_aero(df, *, theme=None):
+    theme = get_theme() if theme is None else theme
+    runs = df if 'cv_time' in df else df.rename(columns={'Activity Date': 'cv_time'})
+    dates = pd.to_datetime(runs['cv_time'], format='mixed', errors='coerce', utc=True)
+    runs = (
+        runs.assign(cv_time=dates)
+        .dropna(subset=['cv_time', 'aero_ratio'])
+        .sort_values('cv_time', kind='stable')
+    )
+    if 'rolling_ratio' not in runs:
+        runs['rolling_ratio'] = runs.rolling('42D', on='cv_time')['aero_ratio'].mean()
+
+    trend = runs.drop_duplicates('cv_time', keep='last')
+    series = alt.Color(
+        'Series:N',
+        scale=alt.Scale(
+            domain=['Individual run', '42-day average'],
+            range=[theme['muted'], config.ACCENT],
+        ),
+        legend=alt.Legend(title=None),
+    )
+    x = alt.X(
+        'cv_time:T', title=None,
+        axis=alt.Axis(format='%b %Y', tickCount=7, labelAngle=0, grid=False),
+    )
+    y_axis = alt.Axis(titleAngle=0, titleAlign='left', titleX=0, titleY=-10)
+    scale = alt.Scale(zero=False)
+
+    points = (
+        alt.Chart(runs)
+        .transform_calculate(Series="'Individual run'")
+        .mark_circle(size=32, opacity=0.45)
+        .encode(
+            x=x,
+            y=alt.Y('aero_ratio:Q', title='Efficiency ratio', scale=scale, axis=y_axis),
+            color=series,
+            tooltip=[
+                alt.Tooltip('cv_time:T', title='Run date', format='%d %b %Y'),
+                alt.Tooltip('aero_ratio:Q', title='Efficiency ratio', format='.2f'),
+            ],
+        )
+    )
+    average = (
+        alt.Chart(trend)
+        .transform_calculate(Series="'42-day average'")
+        .mark_line(strokeWidth=2.8, point=alt.OverlayMarkDef(size=13, filled=True))
+        .encode(
+            x=x,
+            y=alt.Y('rolling_ratio:Q', title='Efficiency ratio', scale=scale, axis=y_axis),
+            color=series,
+            tooltip=[
+                alt.Tooltip('cv_time:T', title='Run date', format='%d %b %Y'),
+                alt.Tooltip('rolling_ratio:Q', title='42-day average', format='.2f'),
+            ],
+        )
+    )
+    return style_chart((points + average).properties(height=360), theme)
+
+
+def plot_prediction_error(mean_mae, *, theme=None):
+    theme = get_theme() if theme is None else theme
+    errors = mean_mae.rename_axis('Model').reset_index(name='MAE')
+    errors['Label'] = errors['MAE'].map('{:.2f}'.format)
+    displayed = errors['MAE'].round(2)
+    errors['Lowest error'] = displayed.eq(displayed.min())
+
+    base = alt.Chart(errors).encode(
+        y=alt.Y('Model:N', sort=errors['Model'].tolist(), axis=alt.Axis(title=None)),
+        x=alt.X(
+            'MAE:Q', axis=None,
+            scale=alt.Scale(domain=[0, max(1, errors['MAE'].max() * 1.18)], nice=False),
+        ),
+    )
+    bars = base.mark_bar(size=23, cornerRadiusEnd=4).encode(
+        color=alt.condition(
+            alt.datum['Lowest error'], alt.value(config.ACCENT), alt.value(theme['muted']),
+        ),
+        tooltip=[
+            alt.Tooltip('Model:N'),
+            alt.Tooltip('MAE:Q', title='MAE (bpm)', format='.2f'),
+        ],
+    )
+    labels = base.mark_text(
+        align='left', dx=6, color=theme['text'], size=12,
+    ).encode(text='Label:N')
+    return style_chart((bars + labels).properties(height=205), theme)
+
+
+def plot_heat_effect(heat_index, adjusted_bpm, fitted_bpm, *, theme=None):
+    theme = get_theme() if theme is None else theme
+    points = pd.DataFrame({
+        'Heat index': heat_index.to_numpy(),
+        'Heart rate': adjusted_bpm.to_numpy(),
+    })
+    fitted = pd.DataFrame({
+        'Heat index': heat_index.to_numpy(),
+        'Heart rate': fitted_bpm.to_numpy(),
+    }).sort_values('Heat index')
+
+    x = alt.X(
+        'Heat index:Q', title='Heat index (°HI)', scale=alt.Scale(zero=False),
+        axis=alt.Axis(tickCount=5, grid=False),
+    )
+    y = alt.Y('Heart rate:Q', title='Heart rate (bpm)', scale=alt.Scale(zero=False))
+
+    dots = alt.Chart(points).mark_circle(
+        color=theme['muted'], opacity=0.55, size=35,
+    ).encode(
+        x=x,
+        y=y,
+        tooltip=[
+            alt.Tooltip('Heat index:Q', format='.2f'),
+            alt.Tooltip('Heart rate:Q', title='Adjusted heart rate (bpm)', format='.2f'),
+        ],
+    )
+    line = alt.Chart(fitted).mark_line(color=config.ACCENT, strokeWidth=2.5).encode(
+        x=x, y=y,
+    )
+    return style_chart((dots + line).properties(height=205), theme)
+
+
+def _load_date_axis():
+    return alt.X(
+        'Date:T', title=None,
+        axis=alt.Axis(format='%d %b %y', tickCount=7, labelOverlap='greedy', grid=False),
+    )
+
+
+def _date_marker(selected_date, x, theme):
+    return alt.Chart(pd.DataFrame({'Date': [pd.Timestamp(selected_date)]})).mark_rule(
+        color=theme['text'], strokeDash=[4, 4], strokeWidth=1.5, opacity=0.7,
+    ).encode(x=x)
+
+
+def plot_fitness_fatigue(df, selected_date=None, *, theme=None, trim_to_last_activity=True):
+    theme = get_theme() if theme is None else theme
+    days = filter_to_last_activity(df) if trim_to_last_activity else df
+    metrics = ['Fitness (CTL)', 'Fatigue (ATL)']
+    data = (
+        days[['Date', 'CTL', 'ATL']]
+        .rename(columns={'CTL': metrics[0], 'ATL': metrics[1]})
+        .melt(id_vars='Date', var_name='Metric', value_name='Load')
+    )
+
+    x = _load_date_axis()
+    line = alt.Chart(data).mark_line(strokeWidth=2.4, point=len(days) == 1).encode(
+        x=x,
+        y=alt.Y('Load:Q', title='Training load'),
+        color=alt.Color(
+            'Metric:N', title=None,
+            scale=alt.Scale(domain=metrics, range=list(config.LOAD_LINE_COLORS)),
+        ),
+        tooltip=[
+            alt.Tooltip('Date:T', format='%d %b %Y'),
+            alt.Tooltip('Metric:N'),
+            alt.Tooltip('Load:Q', format='.2f'),
+        ],
+    )
+    if selected_date is not None:
+        line = line + _date_marker(selected_date, x, theme)
+
+    return style_chart(line.properties(height=300), theme)
+
+
+def plot_tsb_zones(df, selected_date=None, *, theme=None, trim_to_last_activity=True):
+    theme = get_theme() if theme is None else theme
+    days = filter_to_last_activity(df) if trim_to_last_activity else df
+    data = days[['Date', 'TSB']]
+    values = data['TSB'].dropna()
+
+    balance = config.TSB_MAINTENANCE_UPPER
+    low, high = balance, balance
+    if not values.empty:
+        low, high = min(values.min(), balance), max(values.max(), balance)
+
+    padding = max(2, (high - low) * 0.08)
+    low, high = low - padding, high + padding
+    scale = alt.Scale(domain=[low, high], nice=False, zero=False)
+
+    thresholds = [
+        -inf, config.TSB_OVERTRAINING_UPPER, config.TSB_OPTIMAL_UPPER, balance, inf,
+    ]
+    zone_colors = config.TSB_ZONE_COLORS
+    bands = pd.DataFrame({
+        'Zone': list(reversed(zone_colors)),
+        'Lower': [max(low, value) for value in thresholds[:-1]],
+        'Upper': [min(high, value) for value in thresholds[1:]],
+    })
+    bands = bands.loc[bands['Lower'] < bands['Upper']]
+
+    shading = alt.Chart(bands).mark_rect(opacity=0.30).encode(
+        x=alt.value(0),
+        x2=alt.value('width'),
+        y=alt.Y('Lower:Q', title='Training stress balance', scale=scale),
+        y2='Upper:Q',
+        color=alt.Color(
+            'Zone:N', title=None,
+            scale=alt.Scale(domain=list(zone_colors), range=list(zone_colors.values())),
+            legend=alt.Legend(symbolType='square', symbolOpacity=1, columns=2),
+        ),
+    )
+
+    x = _load_date_axis()
+    trace = alt.Chart(data).mark_line(
+        color=theme['text'], strokeWidth=2.6, point=len(values) == 1,
+    ).encode(
+        x=x,
+        y=alt.Y('TSB:Q', title='Training stress balance', scale=scale),
+        tooltip=[
+            alt.Tooltip('Date:T', format='%d %b %Y'),
+            alt.Tooltip('TSB:Q', title='Form (TSB)', format='.2f'),
+        ],
+    )
+
+    chart = shading
+    if selected_date is not None:
+        chart = chart + _date_marker(selected_date, x, theme)
+
+    return style_chart((chart + trace).properties(height=300), theme)
+
+
+def plot_cluster_efficiency(df, colors=None, *, theme=None):
+    theme = get_theme() if theme is None else theme
+    columns = {}
+    if 'Date' not in df:
+        columns['Activity Date'] = 'Date'
+    if 'Efficiency ratio' not in df:
+        columns['aero_ratio'] = 'Efficiency ratio'
+
+    points = df.rename(columns=columns)
+    dates = pd.to_datetime(points['Date'], format='mixed', errors='coerce', utc=True)
+    points = points.assign(Date=dates).dropna(subset=['Date', CLUSTER, 'Efficiency ratio'])
+
+    if colors is None:
+        names = sorted(points[CLUSTER].unique())
+        colors = dict(zip(names, cycle(config.CHART_CATEGORICAL_COLORS)))
+
+    series = []
+    for _, group in points.groupby(CLUSTER, sort=False):
+        group = group.sort_values('Date', kind='stable').copy()
+        group['42-day average'] = group.rolling('42D', on='Date')['Efficiency ratio'].mean()
+        series.append(group.drop_duplicates('Date', keep='last'))
+
+    trend = (
+        pd.concat(series) if series
+        else points.assign(**{'42-day average': float('nan')})
+    )
+    active_names = set(points[CLUSTER])
+    names = [name for name in colors if name in active_names]
+    color = alt.Color(
+        f'{CLUSTER}:N', title=None,
+        scale=alt.Scale(domain=names, range=[colors[name] for name in names]),
+        legend=alt.Legend(symbolType='square', symbolOpacity=1),
+    )
+    x = alt.X(
+        'Date:T', title=None,
+        axis=alt.Axis(
+            format='%b %Y', tickCount=7, labelAngle=0, labelOverlap='greedy', grid=False,
+        ),
+    )
+    y_scale = alt.Scale(zero=False)
+
+    dots = alt.Chart(points).mark_circle(size=33, opacity=0.40).encode(
+        x=x,
+        y=alt.Y('Efficiency ratio:Q', scale=y_scale),
+        color=color,
+        tooltip=[
+            alt.Tooltip('Date:T', format='%d %b %Y'),
+            alt.Tooltip(f'{CLUSTER}:N'),
+            alt.Tooltip('Efficiency ratio:Q', format='.2f'),
+        ],
+    )
+    lines = alt.Chart(trend).mark_line(strokeWidth=2.6, opacity=1).encode(
+        x=x,
+        y=alt.Y('42-day average:Q', title='Efficiency ratio', scale=y_scale),
+        color=color,
+        tooltip=[
+            alt.Tooltip('Date:T', format='%d %b %Y'),
+            alt.Tooltip(f'{CLUSTER}:N'),
+            alt.Tooltip('42-day average:Q', format='.2f'),
+        ],
+    )
+    return style_chart((dots + lines).properties(height=345), theme)
+
+
+def plot_silhouette(scores_df, best_k=None, *, theme=None):
+    theme = get_theme() if theme is None else theme
+    scores = scores_df
+    if best_k is None:
+        best_k = int(scores.loc[scores['score'].idxmax(), 'k'])
+
+    base = alt.Chart(scores).encode(
+        x=alt.X(
+            'k:Q', title='Number of clusters (k)',
+            scale=alt.Scale(
+                domain=[scores['k'].min() - 0.5, scores['k'].max() + 0.5],
+                nice=False,
+            ),
+            axis=alt.Axis(values=scores['k'].tolist(), format='d', grid=False),
+        ),
         y=alt.Y('score:Q', title='Silhouette score', scale=alt.Scale(zero=False)),
-        tooltip=['k:O', alt.Tooltip('score:Q', format='.3f')]
-    ).properties(height=250)
-
-# Plots aerobic efficiency coloured by cluster, with a 42-day trend line per cluster
-def plot_cluster_efficiency(df):
-    df = df.sort_values('Activity Date').copy()
-    df['moving_avg'] = df.groupby('Cluster Name', group_keys=False).apply(
-        lambda g: g.rolling('42D', on='Activity Date')['aero_ratio'].mean()
+        tooltip=[alt.Tooltip('k:Q', format='d'), alt.Tooltip('score:Q', format='.3f')],
     )
-    df['graph_date'] = df['Activity Date'].dt.strftime('%Y-%m-%dT%H:%M:%S')
-
-    base = alt.Chart(df).encode(
-        x=alt.X('graph_date:T', title='Date'),
-        color=alt.Color('Cluster Name:N', title='Run type')
+    line = base.mark_line(color=config.CHART_SECONDARY, point=True)
+    best = base.transform_filter(alt.datum.k == best_k)
+    point = best.mark_circle(color=config.ACCENT, size=120, opacity=1)
+    label = best.mark_text(dy=-15, color=theme['text'], size=12).encode(
+        text=alt.value(f'Best k = {best_k}'),
     )
-
-    points = base.mark_circle(size=50, opacity=0.5).encode(
-        y=alt.Y('aero_ratio:Q', title='Efficiency ratio', scale=alt.Scale(zero=False)),
-        tooltip=[alt.Tooltip('graph_date:T', title='Date', format='%Y-%m-%d'),
-                 'Cluster Name:N', 'aero_ratio:Q']
-    )
-    lines = base.mark_line(size=3).encode(y='moving_avg:Q')
-
-    return alt.layer(points, lines).properties(height=400)
+    return style_chart((line + point + label).properties(height=215, padding={'top': 20}), theme)
