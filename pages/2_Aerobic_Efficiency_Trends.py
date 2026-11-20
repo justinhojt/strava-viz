@@ -336,7 +336,19 @@ with kpi_slot:
 if runs.empty:
     st.info('No steady-state runs had enough data to plot aerobic efficiency.')
 else:
-    st.altair_chart(efficiency_chart(runs), width='stretch')
+        st.html('''
+        <style>
+        @media (min-width: 64rem) {
+            .st-key-efficiency_chart {
+                width: calc(100% + 2rem);
+                max-width: none;
+                margin-inline: -1rem;
+            }
+        }
+        </style>
+    ''')
+    with st.container(key='efficiency_chart'):
+        st.altair_chart(efficiency_chart(runs), width='stretch')
     st.caption(
         'Efficiency ratio is grade-adjusted speed divided by the fraction '
         'of heart-rate reserve used.'
