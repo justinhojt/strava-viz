@@ -18,7 +18,8 @@ else:
 
 trimps = parse_granular(summary_df.copy())
 
-st.subheader('📅 Historical Performance Analysis')
+st.title('Fitness Fatigue Form')
+st.caption('Training load, fatigue, and form over time.')
 
 # Date slider
 min_date = trimps['Date'].min().to_pydatetime() # Streamlit uses python datetime instead of pandas datetime
