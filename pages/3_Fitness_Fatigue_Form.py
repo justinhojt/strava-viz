@@ -145,7 +145,7 @@ def plot_form(days, selected):
     })
     bands = bands[bands['Lower'] < bands['Upper']]
 
-    shading = alt.Chart(bands).mark_rect(opacity=0.25).encode(
+    shading = alt.Chart(bands).mark_rect(opacity=0.30).encode(
         x=alt.value(0),
         x2=alt.value('width'),
         y=alt.Y('Lower:Q', title='Training stress balance', scale=scale),
