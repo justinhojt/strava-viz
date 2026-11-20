@@ -108,3 +108,55 @@ def name_clusters(df):
     # If two clusters get the same name, add the cluster number so the legend stays unique
     counts = pd.Series(names).value_counts()
     return {c: n if counts[n] == 1 else f'{n} (#{c})' for c, n in names.items()}
+
+def clean_numeric(values):
+    if isinstance(values, pd.DataFrame):
+        numeric = values.apply(pd.to_numeric, errors='coerce')
+    else:
+        numeric = pd.to_numeric(values, errors='coerce')
+    return numeric.replace([np.inf, -np.inf], np.nan)
+
+
+def rolling_average(frame, value_col, date_col, *, window=None, group_col=None):
+    """Return chronological rolling means aligned to the input rows."""
+    if window is None:
+        window = config.BASELINE_WINDOW
+
+    positions = pd.RangeIndex(len(frame))
+    ordered = (
+        frame.reset_index(drop=True)
+        .dropna(subset=[date_col])
+        .sort_values(date_col, kind='stable')
+    )
+    if ordered.empty:
+        return pd.Series(index=frame.index, dtype=float, name=value_col)
+
+    if group_col is None:
+        averages = ordered.rolling(window, on=date_col)[value_col].mean()
+    else:
+        averages = pd.concat([
+            group.rolling(window, on=date_col)[value_col].mean()
+            for _, group in ordered.groupby(
+                group_col, sort=False, observed=True, dropna=False,
+            )
+        ])
+
+    return pd.Series(
+        averages.reindex(positions).to_numpy(),
+        index=frame.index,
+        name=value_col,
+    )
+
+
+def heart_rate_reserve(hr_max=None, hr_rest=None):
+    if hr_max is None:
+        hr_max = config.DEFAULT_HR_MAX
+    if hr_rest is None:
+        hr_rest = config.DEFAULT_HR_REST
+    return hr_max - hr_rest
+
+
+def hrr_fraction(heart_rate, hr_max=None, hr_rest=None):
+    if hr_rest is None:
+        hr_rest = config.DEFAULT_HR_REST
+    return (heart_rate - hr_rest) / heart_rate_reserve(hr_max, hr_rest)
