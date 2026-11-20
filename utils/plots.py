@@ -23,9 +23,13 @@ def get_theme():
     return {**colors, 'text': text or colors['text']}
 
 
-def style_chart(chart, theme=None):
+def style_chart(chart, theme=None, *, height=None, legend_orient='bottom'):
     theme = get_theme() if theme is None else theme
     font = config.CHART_FONT
+    if height is not None:
+        chart = chart.properties(height=height)
+
+    legend_direction = 'vertical' if legend_orient in ('left', 'right') else 'horizontal'
     return (
         chart.configure(font=font)
         .configure_axis(
@@ -35,7 +39,7 @@ def style_chart(chart, theme=None):
         )
         .configure_legend(
             labelFont=font, labelColor=theme['text'], labelFontSize=12,
-            orient='bottom', direction='horizontal',
+            orient=legend_orient, direction=legend_direction,
         )
         .configure_view(stroke=None)
     )
