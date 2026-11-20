@@ -56,7 +56,7 @@ def elapsed_axis(duration):
     )
 
 
-def plot_series(data, metric, unit, color, bands=None, zone_color=None):
+def plot_series(data, metric, unit, bands=None, zone_color=None):
     duration = max(float(data['Elapsed seconds'].max()), 1)
     x = alt.X(
         'Elapsed seconds:Q',
@@ -77,7 +77,7 @@ def plot_series(data, metric, unit, color, bands=None, zone_color=None):
         visible = visible[visible['Lower'] < visible['Upper']]
 
     line = alt.Chart(data[['Elapsed seconds', 'Elapsed', metric]]).mark_line(
-        color=color,
+        color='#000000',
         strokeWidth=2.1,
         clip=True,
     ).encode(
@@ -199,17 +199,18 @@ moving_label = format_clock(moving) if pd.notna(moving) else '—'
 hr_metrics = [
     ('Average heart rate', optional_metric(session['Average Heart Rate'], '{:.0f} bpm')),
     ('Maximum heart rate', optional_metric(session['Max Heart Rate'], '{:.0f} bpm')),
-    ('Training intensity score', optional_metric(trimp, '{:.2f}')),
+    ('Training load', optional_metric(trimp, '{:.2f}')),
 ]
+
 if selected_type in ('Workout', 'Weight Training'):
     metrics = [('Moving time', moving_label), *hr_metrics]
     metric_columns = 2
 else:
     swim = selected_type == 'Swim'
-    pace_unit = '100 m' if swim else 'km'
+    pace_label = 'Pace (min/100 m)' if swim else 'Pace (min/km)'
     pace_distance = 100 if swim else 1000
     pace = (
-        f'{format_clock(moving * pace_distance / distance)} / {pace_unit}'
+        format_clock(moving * pace_distance / distance)
         if pd.notna(moving) and pd.notna(distance) and distance > 0 else '—'
     )
     distance_label = (
@@ -219,7 +220,7 @@ else:
     metrics = [
         ('Distance', distance_label),
         ('Moving time', moving_label),
-        ('Pace', pace),
+        (pace_label, pace),
         *hr_metrics,
     ]
     metric_columns = 3
@@ -283,15 +284,12 @@ with time_in_zones.container(border=True):
 
 if has_hr:
     st.markdown('## Heart rate')
-    hr_chart = plot_series(
-        series, 'heart_rate', 'Heart rate (bpm)', text_color, bands, zone_color,
-    )
+    hr_chart = plot_series(series, 'heart_rate', 'Heart rate (bpm)', bands, zone_color)
     st.altair_chart(hr_chart, width='stretch')
 
 if has_elevation:
     st.markdown('## Elevation')
-    elevation_color = getattr(config, 'CHART_SECONDARY', '#4D769B')
     st.altair_chart(
-        plot_series(series, 'elevation', 'Elevation (m)', elevation_color),
+        plot_series(series, 'elevation', 'Elevation (m)'),
         width='stretch',
     )
