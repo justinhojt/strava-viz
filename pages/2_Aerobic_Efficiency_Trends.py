@@ -340,7 +340,7 @@ else:
         <style>
         @media (min-width: 64rem) {
             .st-key-efficiency_chart {
-                width: calc(100% + 2rem);
+                width: calc(100% + 8rem);
                 max-width: none;
                 margin-inline: -1rem;
             }
