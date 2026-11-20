@@ -26,7 +26,7 @@ def activity_mix_chart(activities):
     ]
 
     colors = config.ACTIVITY_MIX_COLORS.copy()
-    extra_colors = cycle(config.CHART_CATEGORICAL_COLORS[3:])
+    extra_colors = cycle(config.ACTIVITY_MIX_EXTRA_COLORS)
     for activity in sorted(set(counts['Activity']) - colors.keys()):
         colors[activity] = next(extra_colors)
 
@@ -87,7 +87,7 @@ def monthly_distance_chart(distance_runs, months):
     )
 
     return alt.Chart(monthly).mark_bar(
-        color=config.CHART_SECONDARY,
+        color=config.STRAVA_ACCENT,
         cornerRadiusTopLeft=3,
         cornerRadiusTopRight=3,
     ).encode(
