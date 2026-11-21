@@ -4,7 +4,7 @@ import streamlit as st
 import config
 from utils.data_loader import get_summary
 from utils.functions import parse_granular
-from utils.plots import get_theme, plot_fitness_fatigue, plot_tsb_zones
+from utils.plots import filter_to_last_activity, get_theme, plot_fitness_fatigue, plot_tsb_zones
 from utils.ui import metric_card
 
 RANGES = {'3 months': 3, '6 months': 6, '1 year': 12, 'All': None}
@@ -38,6 +38,9 @@ trimps = trimps.dropna(subset=['Date']).sort_values('Date', kind='stable')
 if trimps.empty:
     st.info('No daily training load has a valid date.')
     st.stop()
+
+# End the timeline on the last day with training load (parse_granular pads out to today)
+trimps = filter_to_last_activity(trimps)
 
 # ---------- Controls ----------
 range_slot, date_slot = st.columns([1.1, 1], gap='medium')
@@ -99,13 +102,13 @@ st.caption('CTL and ATL show end-of-day load. TSB shows form going into the sele
 fitness_tab, form_tab = st.tabs(['Fitness and fatigue', 'Training stress balance'])
 with fitness_tab:
     st.altair_chart(
-        plot_fitness_fatigue(visible, selected_date, theme=theme, trim_to_last_activity=False),
+        plot_fitness_fatigue(visible, selected_date, theme=theme),
         width='stretch',
     )
 
 with form_tab:
     st.altair_chart(
-        plot_tsb_zones(visible, selected_date, theme=theme, trim_to_last_activity=False),
+        plot_tsb_zones(visible, selected_date, theme=theme),
         width='stretch',
     )
 
