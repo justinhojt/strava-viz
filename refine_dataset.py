@@ -12,7 +12,7 @@ from timezonefinder import TimezoneFinder
 from fitparse import FitFile
 from tqdm import tqdm
 
-from utils.data_loader import parse_gpx, parse_fit
+from utils.data_loader import load_recording
 from utils.functions import get_trimp_for_row
 
 # Globally disable logging warnings to keep our progress bar clean
@@ -224,12 +224,7 @@ def main():
             lat, lon = extract_start_coords(filename)
 
             try:
-                if filename.endswith(('.gpx', '.gpx.gz')):
-                    ts_df = parse_gpx(filename)
-                elif filename.endswith(('.fit', '.fit.gz')):
-                    ts_df = parse_fit(filename)
-                else:
-                    ts_df = None
+                ts_df = load_recording(filename)
             except Exception as e:
                 tqdm.write(f'   ❌ Could not parse {filename} for TRIMP: {e}')
                 ts_df = None
