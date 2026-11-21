@@ -125,3 +125,12 @@ def parse_fit(fit_filename, local_tz=config.TIMEZONE_TARGET):
             })
 
     return process_timestamps(pd.DataFrame(track_data), local_tz)
+
+def load_recording(filename):
+    # Parse a GPX or FIT file (optionally gzipped); return None for other types.
+    name = str(filename).lower()
+    if name.endswith(('.gpx', '.gpx.gz')):
+        return parse_gpx(filename)
+    if name.endswith(('.fit', '.fit.gz')):
+        return parse_fit(filename)
+    return None
