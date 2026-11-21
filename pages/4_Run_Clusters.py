@@ -151,7 +151,11 @@ else:
     st.altair_chart(
         plot_cluster_efficiency(shown, colors, theme=theme), width='stretch',
     )
-    st.caption('Dots are individual runs. Lines are 42-day rolling averages per cluster.')
+    st.caption(
+    'Dots are individual runs. Lines are 42-day rolling averages per cluster. '
+    'Efficiency here is raw and not weather-adjusted, so changes over time, including the '
+    '90-day comparison above, may partly reflect hotter or cooler conditions rather than fitness.'
+    )
 
 # ---------- Choosing k ----------
 with st.expander('Choosing k'):
