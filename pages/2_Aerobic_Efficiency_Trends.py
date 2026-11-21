@@ -27,11 +27,12 @@ FEATURE_SETS = {
     FULL: [PACE, 'duration_min', 'heat_index'],
 }
 HRR_RANGE = heart_rate_reserve()
+HI = '°HI'    # the one heat-index unit used on this page (matches the plot axis)
 
 
 def heat_verdict(coef, low, high, gain, helped, folds):
     """Plain-language summary of the heat effect, without overclaiming."""
-    size = f'{coef:+.2f} bpm per 1° HI'
+    size = f'{coef:+.2f} bpm per {HI}'
     if gain > 0:
         cv = f'Adding heat lowered held-out error by {gain:.2f} bpm (better in {helped} of {folds} folds).'
     else:
@@ -50,7 +51,7 @@ def heat_verdict(coef, low, high, gain, helped, folds):
 
 
 st.title('Aerobic Efficiency Trends')
-st.caption('Steady-state runs with over 15 minutes of moving time.')
+st.caption('Steady-state runs with at least 15 minutes of moving time.')
 
 summary_df = get_summary()
 if summary_df.empty:
@@ -141,7 +142,10 @@ if n_samples >= config.ML_MIN_SAMPLES and len(timestamps) > n_splits:
     model_trained = True
 
 # ---------- Choose which runs and metric to plot ----------
+# Raw always uses every eligible run, so the headline trend never depends on whether the
+# weather model trained. Weather-adjusted can only use runs with usable weather.
 kpi_slot = st.container()
+view = 'Raw'
 
 if model_trained and not matched_runs.empty:
     view = st.segmented_control(
@@ -152,12 +156,12 @@ if model_trained and not matched_runs.empty:
         help=(
             f'Reference weather is {standard_temp:.0f}°C and {standard_hum:.0f}% humidity. '
             'The heat effect is estimated from your runs and may be weak, so treat the '
-            'adjustment as modest.'
+            'adjustment as modest. Weather-adjusted uses only runs with usable weather.'
         ),
     ) or 'Raw'
 
-    ratio_col = 'adjusted_aero_ratio' if view == 'Weather-adjusted' else 'aero_ratio'
-    display_runs = matched_runs.assign(aero_ratio=matched_runs[ratio_col])
+if view == 'Weather-adjusted':
+    display_runs = matched_runs.assign(aero_ratio=matched_runs['adjusted_aero_ratio'])
 else:
     display_runs = eligible
 
@@ -199,8 +203,16 @@ else:
         'Efficiency ratio is grade-adjusted speed divided by the fraction '
         'of heart-rate reserve used.'
     )
-    if model_trained and not matched_runs.empty:
-        st.caption('Both views use the same runs with usable weather.')
+    if view == 'Weather-adjusted':
+        st.caption(
+            f'Showing {len(runs):,} of {len(eligible):,} eligible runs: only runs with usable '
+            'weather can be adjusted, so this view covers fewer runs than Raw.'
+        )
+    elif model_trained:
+        st.caption(
+            f'Showing all {len(eligible):,} eligible runs. The weather-adjusted view uses '
+            f'{len(matched_runs):,} of them.'
+        )
 
 # ---------- Heat model comparison ----------
 if model_trained:
@@ -214,8 +226,8 @@ if model_trained:
     if heat_ci_available:
         st.write(heat_verdict(coef_heat_bpm, ci_low, ci_high, heat_gain.mean(), helped, len(fold_mae)))
         metric_cards([
-            ('Heat coefficient (bpm per °HI)', f'{coef_heat_bpm:+.2f}'),
-            ('95% interval (bpm per °HI)', f'{ci_low:+.2f} to {ci_high:+.2f}'),
+            (f'Heat coefficient (bpm per {HI})', f'{coef_heat_bpm:+.2f}'),
+            (f'95% interval (bpm per {HI})', f'{ci_low:+.2f} to {ci_high:+.2f}'),
             ('Error reduction with heat', f'{heat_gain.mean():+.2f} bpm'),
         ])
     else:
@@ -268,7 +280,7 @@ if model_trained:
         if heat_ci_available:
             hi_p10, hi_p90 = ml_df['heat_index'].quantile([0.10, 0.90])
             st.write(
-                f'The middle 80% of heat-index readings ranged from {hi_p10:.2f} to {hi_p90:.2f}° HI. '
+                f'The middle 80% of heat-index readings ranged from {hi_p10:.2f} to {hi_p90:.2f} {HI}. '
                 f'The fitted heart-rate difference across that range was '
                 f'{(hi_p90 - hi_p10) * coef_heat_bpm:+.2f} bpm at the same pace and duration.'
             )
@@ -291,12 +303,13 @@ Aerobic efficiency divides grade-adjusted speed by the fraction of heart-rate re
 
 $$ \text{Efficiency} = \frac{\text{Grade-adjusted speed}}{\text{Fraction of heart-rate reserve used}} $$
 
-Only steady-state runs with over 15 minutes of moving time are used. The 42-day average
+Only steady-state runs with at least 15 minutes of moving time are used. The 42-day average
 weights each run equally within the previous 42 days. The six-month comparison uses the
 42-day window ending six calendar months before the latest run in view.
 
-The weather-adjusted view shifts each run's heart rate by the estimated heat effect, as if
-it had been run at the reference heat index, with pace and duration held fixed. Heat index
+The Raw view uses every eligible run. The weather-adjusted view shifts each run's heart rate
+by the estimated heat effect, as if it had been run at the reference heat index, with pace
+and duration held fixed. It can only include runs with usable weather. Heat index (°HI)
 combines air temperature and humidity into one value.
 """
     )
