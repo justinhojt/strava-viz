@@ -20,7 +20,7 @@ def form_status(value):
     return 'Fresh / Recovery'
 
 
-st.title('Fitness Fatigue Form')
+st.title('Fitness, Fatigue & Form')
 st.caption('Training load, fatigue, and form over time.')
 
 summary_df = get_summary()
@@ -110,11 +110,11 @@ with form_tab:
     )
 
 with st.expander('Methodology'):
-    st.markdown("""
+    st.markdown(f"""
 | Metric | Meaning |
 | --- | --- |
-| CTL · Chronic training load | Longer-term fitness estimate, weighted toward the past 42 days |
-| ATL · Acute training load | Recent fatigue estimate, weighted toward the past 7 days |
+| CTL · Chronic training load | Longer-term fitness estimate, weighted toward the past {config.CTL_DAY_SPAN} days |
+| ATL · Acute training load | Recent fatigue estimate, weighted toward the past {config.ATL_DAY_SPAN} days |
 | TSB · Training stress balance | Previous day’s CTL minus ATL, used as the current day’s form |
 
 CTL and ATL are exponentially weighted averages of daily training load.
