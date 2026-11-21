@@ -2,7 +2,7 @@ import pandas as pd
 import streamlit as st
 
 import config
-from utils.data_loader import get_summary, parse_fit, parse_gpx
+from utils.data_loader import get_summary, load_recording
 from utils.functions import get_trimp_for_row
 from utils.plots import (
     format_clock,
@@ -17,15 +17,6 @@ MAX_GAP_SECONDS = 10  # gaps longer than this are treated as auto-pause
 
 def optional_metric(value, format_string):
     return format_string.format(value) if pd.notna(value) else '—'
-
-
-def load_recording(filename):
-    name = str(filename).lower()
-    if name.endswith(('.gpx', '.gpx.gz')):
-        return parse_gpx(filename)
-    if name.endswith(('.fit', '.fit.gz')):
-        return parse_fit(filename)
-    return None
 
 
 def prepare_series(recorded):
